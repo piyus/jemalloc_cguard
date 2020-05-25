@@ -23,14 +23,14 @@
  * of assertion failures in malloc_*printf().
  */
 #define assert(e) do {							\
-	if (config_debug && !(e)) {					\
+	if (!(e)) {					\
 		malloc_write("<jemalloc>: Failed assertion\n");		\
 		abort();						\
 	}								\
 } while (0)
 
 #define not_reached() do {						\
-	if (config_debug) {						\
+	if (1) {						\
 		malloc_write("<jemalloc>: Unreachable code reached\n");	\
 		abort();						\
 	}								\
@@ -38,14 +38,14 @@
 } while (0)
 
 #define not_implemented() do {						\
-	if (config_debug) {						\
+	if (1) {						\
 		malloc_write("<jemalloc>: Not implemented\n");		\
 		abort();						\
 	}								\
 } while (0)
 
 #define assert_not_implemented(e) do {					\
-	if (unlikely(config_debug && !(e))) {				\
+	if (unlikely(1 && !(e))) {				\
 		not_implemented();					\
 	}								\
 } while (0)
