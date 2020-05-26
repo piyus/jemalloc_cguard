@@ -20,6 +20,48 @@
 #include "jemalloc/internal/ticker.h"
 #include "jemalloc/internal/util.h"
 
+struct obj_header {
+	unsigned magic;
+	unsigned size;
+};
+
+#ifndef NO_SAFETY
+#define OBJ_HEADER_SIZE (sizeof(struct obj_header))
+#else
+#define OBJ_HEADER_SIZE 0
+#endif
+
+#ifndef NO_SAFETY
+
+#define MAGIC_NUMBER 0xdeadface
+
+static void *make_obj_header(void *ptr, size_t size) {
+	if (ptr == NULL) {
+		return ptr;
+	}
+
+	struct obj_header *header = (struct obj_header*)ptr;
+	header->magic = MAGIC_NUMBER;
+	header->size = (unsigned)size;
+	return &header[1];
+}
+
+static void *get_obj_header(void *ptr) {
+	if (ptr == NULL) {
+		return NULL;
+	}
+	struct obj_header *header = ((struct obj_header*)ptr) - 1;
+	assert(header->magic == MAGIC_NUMBER);
+	return header;
+
+}
+
+#else
+#define make_obj_header(x, y) x
+#define get_obj_header(x) x
+#endif
+
+
 /******************************************************************************/
 /* Data. */
 
@@ -2392,8 +2434,8 @@ JEMALLOC_EXPORT JEMALLOC_ALLOCATOR JEMALLOC_RESTRICT_RETURN
 void JEMALLOC_NOTHROW *
 JEMALLOC_ATTR(malloc) JEMALLOC_ALLOC_SIZE(1)
 je_malloc(size_t size) {
-	void *ret = _je_malloc(size);
-	return ret;
+	void *ret = _je_malloc(size + OBJ_HEADER_SIZE);
+	return make_obj_header(ret, size);
 }
 
 JEMALLOC_EXPORT int JEMALLOC_NOTHROW
@@ -2519,8 +2561,9 @@ void JEMALLOC_NOTHROW *
 JEMALLOC_ATTR(malloc) JEMALLOC_ALLOC_SIZE2(1, 2)
 je_calloc(size_t num, size_t size) {
 	size_t total_size = num * size;
-	void *ret = _je_malloc(total_size);
+	void *ret = _je_malloc(total_size + OBJ_HEADER_SIZE);
 	if (ret) {
+		ret = make_obj_header(ret, total_size);
 		bzero(ret, total_size);
 	}
 	return ret;
@@ -2794,8 +2837,9 @@ JEMALLOC_EXPORT JEMALLOC_ALLOCATOR JEMALLOC_RESTRICT_RETURN
 void JEMALLOC_NOTHROW *
 JEMALLOC_ALLOC_SIZE(2)
 je_realloc(void *ptr, size_t arg_size) {
-	char *ret = _je_realloc(ptr, arg_size);
-	return ret;
+	void *head = get_obj_header(ptr);
+	void *newptr = _je_realloc(head, arg_size + OBJ_HEADER_SIZE);
+	return make_obj_header(newptr, arg_size);
 }
 
 JEMALLOC_NOINLINE
@@ -2904,7 +2948,8 @@ _je_free(void *ptr) {
 
 JEMALLOC_EXPORT void JEMALLOC_NOTHROW
 je_free(void *ptr) {
-	_je_free(ptr);
+	void *head = get_obj_header(ptr);
+	_je_free(head);
 }
 
 /*
