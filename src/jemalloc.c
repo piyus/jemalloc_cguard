@@ -2317,10 +2317,10 @@ malloc_default(size_t size) {
  * fastpath supports ticker and profiling, both of which will also
  * tail-call to the slowpath if they fire.
  */
-JEMALLOC_EXPORT JEMALLOC_ALLOCATOR JEMALLOC_RESTRICT_RETURN
+static JEMALLOC_ALLOCATOR JEMALLOC_RESTRICT_RETURN
 void JEMALLOC_NOTHROW *
 JEMALLOC_ATTR(malloc) JEMALLOC_ALLOC_SIZE(1)
-je_malloc(size_t size) {
+_je_malloc(size_t size) {
 	LOG("core.malloc.entry", "size: %zu", size);
 
 	if (tsd_get_allocates() && unlikely(!malloc_initialized())) {
@@ -2386,6 +2386,14 @@ je_malloc(size_t size) {
 	}
 
 	return malloc_default(size);
+}
+
+JEMALLOC_EXPORT JEMALLOC_ALLOCATOR JEMALLOC_RESTRICT_RETURN
+void JEMALLOC_NOTHROW *
+JEMALLOC_ATTR(malloc) JEMALLOC_ALLOC_SIZE(1)
+je_malloc(size_t size) {
+	void *ret = _je_malloc(size);
+	return ret;
 }
 
 JEMALLOC_EXPORT int JEMALLOC_NOTHROW
@@ -2468,10 +2476,11 @@ je_aligned_alloc(size_t alignment, size_t size) {
 	return ret;
 }
 
-JEMALLOC_EXPORT JEMALLOC_ALLOCATOR JEMALLOC_RESTRICT_RETURN
+#if 0
+static JEMALLOC_ALLOCATOR JEMALLOC_RESTRICT_RETURN
 void JEMALLOC_NOTHROW *
 JEMALLOC_ATTR(malloc) JEMALLOC_ALLOC_SIZE2(1, 2)
-je_calloc(size_t num, size_t size) {
+_je_calloc(size_t num, size_t size) {
 	void *ret;
 	static_opts_t sopts;
 	dynamic_opts_t dopts;
@@ -2499,6 +2508,19 @@ je_calloc(size_t num, size_t size) {
 
 	LOG("core.calloc.exit", "result: %p", ret);
 
+	return ret;
+}
+#endif
+
+JEMALLOC_EXPORT JEMALLOC_ALLOCATOR JEMALLOC_RESTRICT_RETURN
+void JEMALLOC_NOTHROW *
+JEMALLOC_ATTR(malloc) JEMALLOC_ALLOC_SIZE2(1, 2)
+je_calloc(size_t num, size_t size) {
+	size_t total_size = num * size;
+	void *ret = _je_malloc(total_size);
+	if (ret) {
+		bzero(ret, total_size);
+	}
 	return ret;
 }
 
@@ -2647,10 +2669,10 @@ isfree(tsd_t *tsd, void *ptr, size_t usize, tcache_t *tcache, bool slow_path) {
 	}
 }
 
-JEMALLOC_EXPORT JEMALLOC_ALLOCATOR JEMALLOC_RESTRICT_RETURN
+static JEMALLOC_ALLOCATOR JEMALLOC_RESTRICT_RETURN
 void JEMALLOC_NOTHROW *
 JEMALLOC_ALLOC_SIZE(2)
-je_realloc(void *ptr, size_t arg_size) {
+_je_realloc(void *ptr, size_t arg_size) {
 	void *ret;
 	tsdn_t *tsdn JEMALLOC_CC_SILENCE_INIT(NULL);
 	size_t usize JEMALLOC_CC_SILENCE_INIT(0);
@@ -2766,6 +2788,14 @@ je_realloc(void *ptr, size_t arg_size) {
 	return ret;
 }
 
+JEMALLOC_EXPORT JEMALLOC_ALLOCATOR JEMALLOC_RESTRICT_RETURN
+void JEMALLOC_NOTHROW *
+JEMALLOC_ALLOC_SIZE(2)
+je_realloc(void *ptr, size_t arg_size) {
+	char *ret = _je_realloc(ptr, arg_size);
+	return ret;
+}
+
 JEMALLOC_NOINLINE
 void
 free_default(void *ptr) {
@@ -2859,8 +2889,8 @@ bool free_fastpath(void *ptr, size_t size, bool size_hint) {
 	return true;
 }
 
-JEMALLOC_EXPORT void JEMALLOC_NOTHROW
-je_free(void *ptr) {
+static void JEMALLOC_NOTHROW
+_je_free(void *ptr) {
 	LOG("core.free.entry", "ptr: %p", ptr);
 
 	if (!free_fastpath(ptr, 0, false)) {
@@ -2868,6 +2898,11 @@ je_free(void *ptr) {
 	}
 
 	LOG("core.free.exit", "");
+}
+
+JEMALLOC_EXPORT void JEMALLOC_NOTHROW
+je_free(void *ptr) {
+	_je_free(ptr);
 }
 
 /*
