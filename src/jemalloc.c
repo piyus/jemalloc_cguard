@@ -2399,6 +2399,7 @@ je_malloc(size_t size) {
 JEMALLOC_EXPORT int JEMALLOC_NOTHROW
 JEMALLOC_ATTR(nonnull(1))
 je_posix_memalign(void **memptr, size_t alignment, size_t size) {
+	assert(0);
 	int ret;
 	static_opts_t sopts;
 	dynamic_opts_t dopts;
@@ -2439,6 +2440,7 @@ JEMALLOC_EXPORT JEMALLOC_ALLOCATOR JEMALLOC_RESTRICT_RETURN
 void JEMALLOC_NOTHROW *
 JEMALLOC_ATTR(malloc) JEMALLOC_ALLOC_SIZE(2)
 je_aligned_alloc(size_t alignment, size_t size) {
+	assert(0);
 	void *ret;
 
 	static_opts_t sopts;
@@ -2918,6 +2920,7 @@ JEMALLOC_EXPORT JEMALLOC_ALLOCATOR JEMALLOC_RESTRICT_RETURN
 void JEMALLOC_NOTHROW *
 JEMALLOC_ATTR(malloc)
 je_memalign(size_t alignment, size_t size) {
+	assert(0);
 	void *ret;
 	static_opts_t sopts;
 	dynamic_opts_t dopts;
@@ -2957,6 +2960,7 @@ JEMALLOC_EXPORT JEMALLOC_ALLOCATOR JEMALLOC_RESTRICT_RETURN
 void JEMALLOC_NOTHROW *
 JEMALLOC_ATTR(malloc)
 je_valloc(size_t size) {
+	assert(0);
 	void *ret;
 
 	static_opts_t sopts;
@@ -3131,6 +3135,7 @@ JEMALLOC_EXPORT JEMALLOC_ALLOCATOR JEMALLOC_RESTRICT_RETURN
 void JEMALLOC_NOTHROW *
 JEMALLOC_ATTR(malloc) JEMALLOC_ALLOC_SIZE(1)
 je_mallocx(size_t size, int flags) {
+	assert(0);
 	void *ret;
 	static_opts_t sopts;
 	dynamic_opts_t dopts;
@@ -3249,6 +3254,7 @@ JEMALLOC_EXPORT JEMALLOC_ALLOCATOR JEMALLOC_RESTRICT_RETURN
 void JEMALLOC_NOTHROW *
 JEMALLOC_ALLOC_SIZE(2)
 je_rallocx(void *ptr, size_t size, int flags) {
+	assert(0);
 	void *p;
 	tsd_t *tsd;
 	size_t usize;
@@ -3423,6 +3429,7 @@ ixallocx_prof(tsd_t *tsd, void *ptr, size_t old_usize, size_t size,
 
 JEMALLOC_EXPORT size_t JEMALLOC_NOTHROW
 je_xallocx(void *ptr, size_t size, size_t extra, int flags) {
+	assert(0);
 	tsd_t *tsd;
 	size_t usize, old_usize;
 	size_t alignment = MALLOCX_ALIGN_GET(flags);
@@ -3494,6 +3501,7 @@ label_not_resized:
 JEMALLOC_EXPORT size_t JEMALLOC_NOTHROW
 JEMALLOC_ATTR(pure)
 je_sallocx(const void *ptr, int flags) {
+	assert(0);
 	size_t usize;
 	tsdn_t *tsdn;
 
@@ -3520,6 +3528,7 @@ je_sallocx(const void *ptr, int flags) {
 
 JEMALLOC_EXPORT void JEMALLOC_NOTHROW
 je_dallocx(void *ptr, int flags) {
+	assert(0);
 	LOG("core.dallocx.entry", "ptr: %p, flags: %d", ptr, flags);
 
 	assert(ptr != NULL);
@@ -3627,6 +3636,7 @@ sdallocx_default(void *ptr, size_t size, int flags) {
 
 JEMALLOC_EXPORT void JEMALLOC_NOTHROW
 je_sdallocx(void *ptr, size_t size, int flags) {
+	assert(0);
 	LOG("core.sdallocx.entry", "ptr: %p, size: %zu, flags: %d", ptr,
 		size, flags);
 
@@ -3652,6 +3662,7 @@ je_sdallocx_noflags(void *ptr, size_t size) {
 JEMALLOC_EXPORT size_t JEMALLOC_NOTHROW
 JEMALLOC_ATTR(pure)
 je_nallocx(size_t size, int flags) {
+	assert(0);
 	size_t usize;
 	tsdn_t *tsdn;
 
@@ -3679,6 +3690,7 @@ je_nallocx(size_t size, int flags) {
 JEMALLOC_EXPORT int JEMALLOC_NOTHROW
 je_mallctl(const char *name, void *oldp, size_t *oldlenp, void *newp,
     size_t newlen) {
+	assert(0);
 	int ret;
 	tsd_t *tsd;
 
@@ -3700,6 +3712,7 @@ je_mallctl(const char *name, void *oldp, size_t *oldlenp, void *newp,
 
 JEMALLOC_EXPORT int JEMALLOC_NOTHROW
 je_mallctlnametomib(const char *name, size_t *mibp, size_t *miblenp) {
+	assert(0);
 	int ret;
 
 	LOG("core.mallctlnametomib.entry", "name: %s", name);
@@ -3721,6 +3734,7 @@ je_mallctlnametomib(const char *name, size_t *mibp, size_t *miblenp) {
 JEMALLOC_EXPORT int JEMALLOC_NOTHROW
 je_mallctlbymib(const size_t *mib, size_t miblen, void *oldp, size_t *oldlenp,
   void *newp, size_t newlen) {
+	assert(0);
 	int ret;
 	tsd_t *tsd;
 
@@ -3742,6 +3756,7 @@ je_mallctlbymib(const size_t *mib, size_t miblen, void *oldp, size_t *oldlenp,
 JEMALLOC_EXPORT void JEMALLOC_NOTHROW
 je_malloc_stats_print(void (*write_cb)(void *, const char *), void *cbopaque,
     const char *opts) {
+	assert(0);
 	tsdn_t *tsdn;
 
 	LOG("core.malloc_stats_print.entry", "");
@@ -3755,6 +3770,7 @@ je_malloc_stats_print(void (*write_cb)(void *, const char *), void *cbopaque,
 
 JEMALLOC_EXPORT size_t JEMALLOC_NOTHROW
 je_malloc_usable_size(JEMALLOC_USABLE_SIZE_CONST void *ptr) {
+	assert(0);
 	size_t ret;
 	tsdn_t *tsdn;
 
