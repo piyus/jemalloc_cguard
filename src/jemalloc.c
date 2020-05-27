@@ -56,9 +56,18 @@ static void *get_obj_header(void *ptr) {
 
 }
 
+static bool is_valid_obj_header(void *ptr) {
+	if (ptr == NULL) {
+		return true;
+	}
+	struct obj_header *header = (struct obj_header*)ptr;
+	return header->magic == MAGIC_NUMBER;
+}
+
 #else
 #define make_obj_header(x, y) x
 #define get_obj_header(x) x
+#define is_valid_obj_header(x) 1
 #endif
 
 
@@ -2438,6 +2447,23 @@ je_malloc(size_t size) {
 	return make_obj_header(ret, size);
 }
 
+JEMALLOC_EXPORT
+void* je_get_base(void *ptr) {
+	tsd_t *tsd = tsd_fetch_min();
+	tsdn_t *tsdn = tsd_tsdn(tsd);
+	assert(tsdn);
+	extent_t *e = iealloc(tsdn, ptr);
+	assert(e);
+	char *eaddr = extent_addr_get(e);
+	if (!extent_slab_get(e)) {
+		return eaddr;
+	}
+	int szind = extent_szind_get(e);
+	size_t diff = (size_t)((char*)ptr - eaddr);
+	size_t offset = diff % bin_infos[szind].reg_size;
+	return ptr - offset;
+}
+
 JEMALLOC_EXPORT int JEMALLOC_NOTHROW
 JEMALLOC_ATTR(nonnull(1))
 je_posix_memalign(void **memptr, size_t alignment, size_t size) {
@@ -2948,7 +2974,9 @@ _je_free(void *ptr) {
 
 JEMALLOC_EXPORT void JEMALLOC_NOTHROW
 je_free(void *ptr) {
-	void *head = get_obj_header(ptr);
+	//void *head = get_obj_header(ptr);
+	void *head = (ptr) ? je_get_base(ptr) : NULL;
+	assert(is_valid_obj_header(head));
 	_je_free(head);
 }
 
