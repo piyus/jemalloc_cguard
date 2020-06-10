@@ -2448,7 +2448,7 @@ je_malloc(size_t size) {
 }
 
 JEMALLOC_EXPORT
-void* je_get_base(void *ptr) {
+void* je_san_get_base(void *ptr) {
 	tsd_t *tsd = tsd_fetch_min();
 	tsdn_t *tsdn = tsd_tsdn(tsd);
 	assert(tsdn);
@@ -2462,6 +2462,14 @@ void* je_get_base(void *ptr) {
 	size_t diff = (size_t)((char*)ptr - eaddr);
 	size_t offset = diff % bin_infos[szind].reg_size;
 	return ptr - offset;
+}
+
+JEMALLOC_EXPORT
+void je_san_abort2(void *base, void *cur) {
+	void *orig_base = je_san_get_base(base);
+	if (cur < orig_base) {
+		abort();
+	}
 }
 
 JEMALLOC_EXPORT int JEMALLOC_NOTHROW
@@ -2975,7 +2983,7 @@ _je_free(void *ptr) {
 JEMALLOC_EXPORT void JEMALLOC_NOTHROW
 je_free(void *ptr) {
 	//void *head = get_obj_header(ptr);
-	void *head = (ptr) ? je_get_base(ptr) : NULL;
+	void *head = (ptr) ? je_san_get_base(ptr) : NULL;
 	assert(is_valid_obj_header(head));
 	_je_free(head);
 }
