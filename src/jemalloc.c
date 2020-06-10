@@ -2466,10 +2466,15 @@ void* je_san_get_base(void *ptr) {
 
 JEMALLOC_EXPORT
 void je_san_abort2(void *base, void *cur) {
-	void *orig_base = je_san_get_base(base);
-	if (cur < orig_base) {
-		abort();
+	if (cur < base) {
+		void *_base = (void*)((unsigned long long)base & 0x7fffffffffffffff);
+		void *_cur = (void*)((unsigned long long)cur & 0x7fffffffffffffff);
+		void *orig_base = je_san_get_base(_base);
+		if (orig_base && _cur >= orig_base) {
+			return;
+		}
 	}
+	abort();
 }
 
 JEMALLOC_EXPORT int JEMALLOC_NOTHROW
