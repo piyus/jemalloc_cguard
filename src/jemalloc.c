@@ -2464,6 +2464,33 @@ void* je_san_get_base(void *ptr) {
 	return ptr - offset;
 }
 
+#include <execinfo.h>
+#define BT_BUF_SIZE 100
+
+static void myfunc3(void)
+{
+	int j, nptrs;
+	void *buffer[BT_BUF_SIZE];
+	char **strings;
+	
+	nptrs = backtrace(buffer, BT_BUF_SIZE);
+	malloc_printf("backtrace() returned %d addresses\n", nptrs);
+	
+	/* The call backtrace_symbols_fd(buffer, nptrs, STDOUT_FILENO)
+	   would produce similar output to the following: */
+	
+	strings = backtrace_symbols(buffer, nptrs);
+	if (strings == NULL) {
+		perror("backtrace_symbols");
+		exit(EXIT_FAILURE);
+	}
+	
+	for (j = 0; j < nptrs; j++)
+		malloc_printf("%s\n", strings[j]);
+	
+	free(strings);
+}
+
 JEMALLOC_EXPORT
 void je_san_abort2(void *base, void *cur) {
 	if (cur < base) {
@@ -2474,7 +2501,31 @@ void je_san_abort2(void *base, void *cur) {
 			return;
 		}
 	}
+	unsigned len = *((unsigned*)base - 1);
+	unsigned magic = *((unsigned*)base -2);
+	char *end = (char*)base + len;
+	malloc_printf("base:%p cur:%p len:%d magic:%x end:%p\n", base, cur, len, magic, end);
+	myfunc3();
 	abort();
+}
+
+JEMALLOC_EXPORT
+void* je_san_copy_argv(int argc, char **argv) {
+	assert(argc >= 1);
+	int i;
+	int argv_size = argc * sizeof(char*);
+	char **new_argv = (char**)je_malloc(argv_size);
+	assert(new_argv);
+	for (i = 0; i < argc; i++) {
+		char *arg = argv[i];
+		int len = strlen(arg);
+		char *new_arg = (char*)je_malloc(len+1);
+		assert(new_arg);
+		memcpy(new_arg, arg, len);
+		new_arg[len] = '\0';
+		new_argv[i] = new_arg;
+	}
+	return (void*)new_argv;
 }
 
 JEMALLOC_EXPORT int JEMALLOC_NOTHROW
