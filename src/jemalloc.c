@@ -2439,16 +2439,20 @@ _je_malloc(size_t size) {
 	return malloc_default(size);
 }
 
-JEMALLOC_EXPORT JEMALLOC_ALLOCATOR JEMALLOC_RESTRICT_RETURN
-void JEMALLOC_NOTHROW *
-JEMALLOC_ATTR(malloc) JEMALLOC_ALLOC_SIZE(1)
-je_malloc(size_t size) {
-	void *ret = _je_malloc(size + OBJ_HEADER_SIZE);
-	return make_obj_header(ret, size);
-}
+#define STACK_SIZE 8092
 
-JEMALLOC_EXPORT
-void* je_san_get_base(void *ptr) {
+static void *_je_san_get_base(void *ptr) {
+	int stack_var;
+	char *stack_end = (char*)&stack_var;
+	char *stack_start = stack_end + STACK_SIZE;
+	if ((char*)ptr <= stack_start && (char*)ptr > stack_end) {
+		unsigned *iter = (unsigned*)ptr;
+		while (iter[0] != 0xdeadface && iter <= (unsigned*)stack_start) {
+			iter--;
+		}
+		return iter;
+	}
+
 	tsd_t *tsd = tsd_fetch_min();
 	tsdn_t *tsdn = tsd_tsdn(tsd);
 	assert(tsdn);
@@ -2462,6 +2466,40 @@ void* je_san_get_base(void *ptr) {
 	size_t diff = (size_t)((char*)ptr - eaddr);
 	size_t offset = diff % bin_infos[szind].reg_size;
 	return ptr - offset;
+}
+
+
+JEMALLOC_EXPORT JEMALLOC_ALLOCATOR JEMALLOC_RESTRICT_RETURN
+void JEMALLOC_NOTHROW *
+JEMALLOC_ATTR(malloc) JEMALLOC_ALLOC_SIZE(1)
+je_malloc(size_t size) {
+	void *ret = _je_malloc(size + OBJ_HEADER_SIZE);
+	return make_obj_header(ret, size);
+}
+
+JEMALLOC_EXPORT
+void* je_san_get_base(void *ptr) {
+	return _je_san_get_base(ptr);
+}
+
+JEMALLOC_EXPORT
+void* je_san_page_fault(void *ptr) {
+	void *optr = (void*)(((unsigned long long)ptr) & 0x7fffffffffffffffULL);
+	//void *base = NULL; //je_san_get_base(optr);
+	//printf("base:%p optr:%p ptr:%p\n", base, optr, ptr);
+	return optr;
+}
+
+JEMALLOC_EXPORT
+void* je_san_page_fault_len(void *ptr) {
+	unsigned *optr = (unsigned*)(((unsigned long long)ptr) & 0x7fffffffffffffffULL);
+	unsigned magic = *(optr-1);
+	if (magic != 0xdeadface) {
+		optr = _je_san_get_base(optr);
+		assert(optr[0] == 0xdeadface);
+		optr += 1;
+	}
+	return optr;
 }
 
 #include <execinfo.h>
@@ -2492,7 +2530,7 @@ static void myfunc3(void)
 }
 
 JEMALLOC_EXPORT
-void je_san_abort2(void *base, void *cur) {
+void je_san_abort2(void *base, void *cur, void *limit, void *ptrlimit, void *size, void *callsite) {
 	if (cur < base) {
 		void *_base = (void*)((unsigned long long)base & 0x7fffffffffffffff);
 		void *_cur = (void*)((unsigned long long)cur & 0x7fffffffffffffff);
@@ -2504,7 +2542,7 @@ void je_san_abort2(void *base, void *cur) {
 	unsigned len = *((unsigned*)base - 1);
 	unsigned magic = *((unsigned*)base -2);
 	char *end = (char*)base + len;
-	malloc_printf("base:%p cur:%p len:%d magic:%x end:%p\n", base, cur, len, magic, end);
+	malloc_printf("base:%p cur:%p len:%d magic:%x end:%p limit:%p ptrlimit:%p size:%p callsite:%p\n", base, cur, len, magic, end, limit, ptrlimit, size, callsite);
 	myfunc3();
 	abort();
 }
