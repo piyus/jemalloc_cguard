@@ -33,6 +33,29 @@ struct obj_header {
 
 #ifndef NO_SAFETY
 
+#define MAX_LARGE_PTRS 1024
+static void *large_ptrs[MAX_LARGE_PTRS];
+static int num_large_ptrs = 0;
+
+static void add_large_pointer(void *ptr) {
+	assert(num_large_ptrs < MAX_LARGE_PTRS);
+	large_ptrs[num_large_ptrs] = ptr;
+	num_large_ptrs++;
+}
+
+static void *search_large_pointer(void *ptr) {
+	int i;
+	for (i = 0; i < num_large_ptrs; i++) {
+		unsigned *sizeptr = ((unsigned*)large_ptrs[i]) + 1;
+		void *start = (void*)(sizeptr + 1);
+		void *end = (void*)((char*)start + sizeptr[0]);
+		if (ptr >= start && ptr < end) {
+			return large_ptrs[i];
+		}
+	}
+	return NULL;
+}
+
 #define MAGIC_NUMBER 0xdeadface
 
 static void *make_obj_header(void *ptr, size_t size) {
@@ -40,6 +63,11 @@ static void *make_obj_header(void *ptr, size_t size) {
 		return ptr;
 	}
 
+	if (size+OBJ_HEADER_SIZE > SC_SMALL_MAXCLASS) {
+		add_large_pointer(ptr);
+	}
+
+	//malloc_printf("mal ptr:%p sz:%zd\n", ptr, size);
 	struct obj_header *header = (struct obj_header*)ptr;
 	header->magic = MAGIC_NUMBER;
 	header->size = (unsigned)size;
@@ -2439,24 +2467,79 @@ _je_malloc(size_t size) {
 	return malloc_default(size);
 }
 
-#define STACK_SIZE 8092
+#define MAX_STACK_PTRS 1024
+static void *stack_ptrs[MAX_STACK_PTRS];
+static int num_stack_ptrs = 0;
+
+JEMALLOC_EXPORT
+void je_san_enter_scope() {
+	assert(num_stack_ptrs < MAX_STACK_PTRS);
+	stack_ptrs[num_stack_ptrs] = NULL;
+	num_stack_ptrs++;
+}
+
+JEMALLOC_EXPORT
+void je_san_exit_scope() {
+	assert(num_stack_ptrs >= 1);
+	num_stack_ptrs--;
+	while (stack_ptrs[num_stack_ptrs]) {
+		num_stack_ptrs--;
+		assert(num_stack_ptrs >= 0);
+	}
+}
+
+JEMALLOC_EXPORT
+void je_san_record_stack_pointer(void *ptr) {
+	assert(num_stack_ptrs < MAX_STACK_PTRS);
+	stack_ptrs[num_stack_ptrs] = ptr;
+	num_stack_ptrs++;
+}
+
+static void* get_stack_ptr_base(void *ptr) {
+	int i;
+	for (i = num_stack_ptrs-1; i > 0; i--) {
+		if (stack_ptrs[i] && ptr >= stack_ptrs[i]) {
+			unsigned *sizeptr = ((unsigned*)stack_ptrs[i]) - 1;
+			unsigned size = sizeptr[0];
+			if ((char*)ptr < ((char*)stack_ptrs[i]) + size) {
+				unsigned *ret = sizeptr - 1;
+				assert(ret[0] == 0xdeadface);
+				return ret;
+			}
+		}
+	}
+	return NULL;
+}
+
+
+
+
+#define STACK_SIZE (8092 * 1024)
 
 static void *_je_san_get_base(void *ptr) {
 	int stack_var;
 	char *stack_end = (char*)&stack_var;
 	char *stack_start = stack_end + STACK_SIZE;
+	//malloc_printf("get_base: %p stack:%p\n", ptr, &stack_var);
 	if ((char*)ptr <= stack_start && (char*)ptr > stack_end) {
-		unsigned *iter = (unsigned*)ptr;
-		while (iter[0] != 0xdeadface && iter <= (unsigned*)stack_start) {
-			iter--;
-		}
-		return iter;
+		unsigned *ret = get_stack_ptr_base(ptr);
+		assert(ret);
+		return ret;
 	}
 
 	tsd_t *tsd = tsd_fetch_min();
 	tsdn_t *tsdn = tsd_tsdn(tsd);
 	assert(tsdn);
-	extent_t *e = iealloc(tsdn, ptr);
+	char *ptr_page = (char*)((unsigned long long)(ptr) & ~0xfffULL);
+	extent_t *e = iealloc(tsdn, ptr_page);
+	if (e == NULL) {
+		ptr_page = search_large_pointer(ptr);
+		assert(ptr_page);
+		e = iealloc(tsdn, ptr_page);
+	}
+	if (!e) {
+		malloc_printf("unable to find the base of : %p stack:%p\n", ptr, &stack_var);
+	}
 	assert(e);
 	char *eaddr = extent_addr_get(e);
 	if (!extent_slab_get(e)) {
@@ -2502,6 +2585,7 @@ void* je_san_page_fault_len(void *ptr) {
 	return optr;
 }
 
+#if 0
 #include <execinfo.h>
 #define BT_BUF_SIZE 100
 
@@ -2528,6 +2612,7 @@ static void myfunc3(void)
 	
 	free(strings);
 }
+#endif
 
 JEMALLOC_EXPORT
 void je_san_abort2(void *base, void *cur, void *limit, void *ptrlimit, void *size, void *callsite) {
