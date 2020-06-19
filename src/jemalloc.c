@@ -2474,6 +2474,7 @@ static int num_stack_ptrs = 0;
 JEMALLOC_EXPORT
 void je_san_enter_scope() {
 	assert(num_stack_ptrs < MAX_STACK_PTRS);
+	//malloc_printf("enter_scope\n");
 	stack_ptrs[num_stack_ptrs] = NULL;
 	num_stack_ptrs++;
 }
@@ -2482,6 +2483,7 @@ JEMALLOC_EXPORT
 void je_san_exit_scope() {
 	assert(num_stack_ptrs >= 1);
 	num_stack_ptrs--;
+	//malloc_printf("exit_scope\n");
 	while (stack_ptrs[num_stack_ptrs]) {
 		num_stack_ptrs--;
 		assert(num_stack_ptrs >= 0);
@@ -2492,6 +2494,7 @@ JEMALLOC_EXPORT
 void je_san_record_stack_pointer(void *ptr) {
 	assert(num_stack_ptrs < MAX_STACK_PTRS);
 	stack_ptrs[num_stack_ptrs] = ptr;
+	//malloc_printf("recording:%p\n", ptr);
 	num_stack_ptrs++;
 }
 
@@ -2577,10 +2580,16 @@ JEMALLOC_EXPORT
 void* je_san_page_fault_len(void *ptr) {
 	unsigned *optr = (unsigned*)(((unsigned long long)ptr) & 0x7fffffffffffffffULL);
 	unsigned magic = *(optr-1);
+	unsigned *head;
+	//malloc_printf("optr:%p ptr:%p\n", optr, ptr);
 	if (magic != 0xdeadface) {
-		optr = _je_san_get_base(optr);
-		assert(optr[0] == 0xdeadface);
-		optr += 1;
+		head = _je_san_get_base(optr);
+		assert(head[0] == 0xdeadface);
+		assert(ptr != (void*)optr);
+		optr = head + 1;
+	}
+	else {
+		assert(ptr == (void*)optr);
 	}
 	return optr;
 }
