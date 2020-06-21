@@ -67,7 +67,7 @@ static void *make_obj_header(void *ptr, size_t size) {
 		add_large_pointer(ptr);
 	}
 
-	malloc_printf("mal ptr:%p sz:%zd\n", ptr, size);
+	//malloc_printf("mal ptr:%p sz:%zd\n", ptr, size);
 	struct obj_header *header = (struct obj_header*)ptr;
 	header->magic = MAGIC_NUMBER;
 	header->size = (unsigned)size;
@@ -2494,7 +2494,7 @@ JEMALLOC_EXPORT
 void je_san_record_stack_pointer(void *ptr) {
 	assert(num_stack_ptrs < MAX_STACK_PTRS);
 	stack_ptrs[num_stack_ptrs] = ptr;
-	malloc_printf("recording:%p\n", ptr);
+	//malloc_printf("recording:%p\n", ptr);
 	num_stack_ptrs++;
 }
 
@@ -2572,7 +2572,7 @@ JEMALLOC_EXPORT
 void* je_san_page_fault_load(void *ptr, int line, char *name) {
 	//malloc_printf("1. store: ptr:%p val:%p\n", ptr, val);
 	void *optr = (void*)(((unsigned long long)ptr) & 0x7fffffffffffffffULL);
-	malloc_printf("load: ptr:%p val:%p %s():%d\n", ptr, *((char**)optr), name, line);
+	//malloc_printf("load: ptr:%p val:%p %s():%d\n", ptr, *((char**)optr), name, line);
 #if 0
 	void *oval = (void*)(((unsigned long long)val) & 0x7fffffffffffffffULL);
 	if (oval) {
