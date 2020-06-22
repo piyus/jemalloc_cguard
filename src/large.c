@@ -25,7 +25,6 @@ large_palloc(tsdn_t *tsdn, arena_t *arena, size_t usize, size_t alignment,
 	bool is_zeroed;
 	UNUSED bool idump JEMALLOC_CC_SILENCE_INIT(false);
 
-	alignment = 4096;
 	//malloc_printf("large_palloc: sz:%zd align:%zd\n", usize, alignment);
 
 	assert(!tsdn_null(tsdn) || arena != NULL);
@@ -279,7 +278,6 @@ large_ralloc(tsdn_t *tsdn, arena_t *arena, void *ptr, size_t usize,
     hook_ralloc_args_t *hook_args) {
 	extent_t *extent = iealloc(tsdn, ptr);
 
-	alignment=4096;
 	//malloc_printf("large_palloc: sz:%zd align:%zd\n", usize, alignment);
 
 	size_t oldusize = extent_usize_get(extent);

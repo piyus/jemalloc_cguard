@@ -37,23 +37,64 @@ struct obj_header {
 static void *large_ptrs[MAX_LARGE_PTRS];
 static int num_large_ptrs = 0;
 
+
+static void failed_large(void *ptr) {
+	int i;
+	malloc_printf("failing large : %d ptr:%p\n", num_large_ptrs, ptr);
+	for (i = 0; i < num_large_ptrs; i++) {
+		if (large_ptrs[i]) {
+			unsigned *sizeptr = ((unsigned*)large_ptrs[i]) + 1;
+			void *start = (void*)(sizeptr + 1);
+			void *end = (void*)((char*)start + sizeptr[0]);
+			malloc_printf("start: %p end:%p ptr:%p\n", start, end, ptr);
+			if (ptr >= start && ptr < end) {
+				malloc_printf("found %p\n", ptr);
+			}
+		}
+	}
+}
+
 static void add_large_pointer(void *ptr) {
 	assert(num_large_ptrs < MAX_LARGE_PTRS);
 	large_ptrs[num_large_ptrs] = ptr;
 	num_large_ptrs++;
+	malloc_printf("adding large ptr: %p num_large_ptrs:%d\n", ptr, num_large_ptrs);
 }
 
 static void *search_large_pointer(void *ptr) {
 	int i;
+	//malloc_printf("searching large : %d\n", num_large_ptrs);
 	for (i = 0; i < num_large_ptrs; i++) {
-		unsigned *sizeptr = ((unsigned*)large_ptrs[i]) + 1;
-		void *start = (void*)(sizeptr + 1);
-		void *end = (void*)((char*)start + sizeptr[0]);
-		if (ptr >= start && ptr < end) {
-			return large_ptrs[i];
+		if (large_ptrs[i]) {
+			unsigned *sizeptr = ((unsigned*)large_ptrs[i]) + 1;
+			void *start = (void*)(sizeptr + 1);
+			void *end = (void*)((char*)start + sizeptr[0]);
+			//malloc_printf("start: %p end:%p ptr:%p\n", start, end, ptr);
+			if (ptr >= start && ptr < end) {
+				//malloc_printf("found\n");
+				return large_ptrs[i];
+			}
 		}
 	}
 	return NULL;
+}
+
+static void remove_large_pointer(void *ptr) {
+	int i;
+	malloc_printf("removing large : %p\n", ptr);
+	for (i = 0; i < num_large_ptrs; i++) {
+		if (large_ptrs[i]) {
+			unsigned *sizeptr = ((unsigned*)large_ptrs[i]) + 1;
+			void *start = (void*)(sizeptr + 1);
+			void *end = (void*)((char*)start + sizeptr[0]);
+			//malloc_printf("start: %p end:%p ptr:%p\n", start, end, ptr);
+			if (ptr >= start && ptr < end) {
+				large_ptrs[i] = NULL;
+				//malloc_printf("removed\n");
+				return;
+			}
+		}
+	}
 }
 
 #define MAGIC_NUMBER 0xdeadface
@@ -64,10 +105,12 @@ static void *make_obj_header(void *ptr, size_t size) {
 	}
 
 	if (size+OBJ_HEADER_SIZE > SC_SMALL_MAXCLASS) {
+		assert(search_large_pointer(ptr) == NULL);
+		assert(search_large_pointer(ptr+size-1) == NULL);
 		add_large_pointer(ptr);
 	}
 
-	//malloc_printf("mal ptr:%p sz:%zd\n", ptr, size);
+	malloc_printf("mal ptr:%p sz:%zd\n", ptr, size);
 	struct obj_header *header = (struct obj_header*)ptr;
 	header->magic = MAGIC_NUMBER;
 	header->size = (unsigned)size;
@@ -80,10 +123,16 @@ static void *get_obj_header(void *ptr) {
 	}
 	struct obj_header *header = ((struct obj_header*)ptr) - 1;
 	assert(header->magic == MAGIC_NUMBER);
+	if (header->size  > SC_SMALL_MAXCLASS - OBJ_HEADER_SIZE) {
+		assert(search_large_pointer(ptr));
+		assert(search_large_pointer(ptr+header->size-1));
+		remove_large_pointer(header);
+	}
 	return header;
 
 }
 
+/*
 static bool is_valid_obj_header(void *ptr) {
 	if (ptr == NULL) {
 		return true;
@@ -91,11 +140,12 @@ static bool is_valid_obj_header(void *ptr) {
 	struct obj_header *header = (struct obj_header*)ptr;
 	return header->magic == MAGIC_NUMBER;
 }
+*/
 
 #else
 #define make_obj_header(x, y) x
 #define get_obj_header(x) x
-#define is_valid_obj_header(x) 1
+//#define is_valid_obj_header(x) 1
 #endif
 
 
@@ -2521,19 +2571,20 @@ static void* get_stack_ptr_base(void *ptr) {
 
 static void *_je_san_get_base(void *ptr) {
 	int stack_var;
-	char *stack_end = (char*)&stack_var;
-	char *stack_start = stack_end + STACK_SIZE;
+	//char *stack_end = (char*)&stack_var;
+	//char *stack_start = stack_end + STACK_SIZE;
 	//malloc_printf("get_base: %p stack:%p\n", ptr, &stack_var);
-	if ((char*)ptr <= stack_start && (char*)ptr > stack_end) {
+	//if ((char*)ptr <= stack_start && (char*)ptr > stack_end) {
 		unsigned *ret = get_stack_ptr_base(ptr);
-		assert(ret);
-		return ret;
-	}
+		if (ret) {
+			return ret;
+		}
+	//}
 
 	tsd_t *tsd = tsd_fetch_min();
 	tsdn_t *tsdn = tsd_tsdn(tsd);
 	assert(tsdn);
-	char *ptr_page = (char*)((unsigned long long)(ptr) & ~0xfffULL);
+	char *ptr_page = (char*)ptr;
 	extent_t *e = iealloc(tsdn, ptr_page);
 	if (e == NULL) {
 		ptr_page = search_large_pointer(ptr);
@@ -2541,7 +2592,8 @@ static void *_je_san_get_base(void *ptr) {
 		e = iealloc(tsdn, ptr_page);
 	}
 	if (!e) {
-		malloc_printf("unable to find the base of : %p stack:%p\n", ptr, &stack_var);
+		failed_large(ptr);
+		malloc_printf("unable to find the base of : %p stack:%p base:%p\n", ptr, &stack_var, ptr_page);
 	}
 	assert(e);
 	char *eaddr = extent_addr_get(e);
@@ -3237,9 +3289,9 @@ _je_free(void *ptr) {
 
 JEMALLOC_EXPORT void JEMALLOC_NOTHROW
 je_free(void *ptr) {
-	//void *head = get_obj_header(ptr);
-	void *head = (ptr) ? je_san_get_base(ptr) : NULL;
-	assert(is_valid_obj_header(head));
+	void *head = get_obj_header(ptr);
+	//void *head = (ptr) ? je_san_get_base(ptr) : NULL;
+	//assert(is_valid_obj_header(head));
 	_je_free(head);
 }
 
