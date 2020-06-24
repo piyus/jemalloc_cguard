@@ -64,7 +64,7 @@ static void add_large_pointer(void *ptr) {
 static void *search_large_pointer(void *ptr) {
 	int i;
 	//malloc_printf("searching large : %d\n", num_large_ptrs);
-	for (i = 0; i < num_large_ptrs; i++) {
+	for (i = num_large_ptrs-1; i >= 0; i--) {
 		if (large_ptrs[i]) {
 			unsigned *sizeptr = ((unsigned*)large_ptrs[i]) + 1;
 			void *start = (void*)(sizeptr + 1);
