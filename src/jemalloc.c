@@ -105,8 +105,8 @@ static void *make_obj_header(void *ptr, size_t size) {
 	}
 
 	if (size+OBJ_HEADER_SIZE > SC_SMALL_MAXCLASS) {
-		assert(search_large_pointer(ptr) == NULL);
-		assert(search_large_pointer(ptr+size-1) == NULL);
+		//assert(search_large_pointer(ptr) == NULL);
+		//assert(search_large_pointer(ptr+size-1) == NULL);
 		add_large_pointer(ptr);
 	}
 
@@ -2692,9 +2692,9 @@ void* je_san_page_fault_call(void *ptr, int line, char *name) {
 JEMALLOC_EXPORT
 void* je_san_page_fault_len(void *ptr, int line, char *name) {
 	unsigned *optr = (unsigned*)(((unsigned long long)ptr) & 0x7fffffffffffffffULL);
+	//malloc_printf("len: ptr:%p %s():%d\n", ptr, name, line);
 	unsigned magic = *(optr-1);
 	unsigned *head;
-	//malloc_printf("len: ptr:%p %s():%d\n", ptr, name, line);
 	if (magic != 0xdeadface) {
 		head = _je_san_get_base(optr);
 		assert(head[0] == 0xdeadface);
