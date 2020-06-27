@@ -2784,14 +2784,16 @@ int je__obstack_begin (struct obstack *h, int size, int alignment,
 
   h->chunkfun = (struct _obstack_chunk * (*)(void *, long)) chunkfun;
   h->freefun = (void (*) (void *, struct _obstack_chunk *)) freefun;
-  h->chunk_size = size;
+  h->chunk_size = size + OBJ_HEADER_SIZE;
   h->alignment_mask = alignment - 1;
   h->use_extra_arg = 0;
 
   chunk = h->chunk = CALL_CHUNKFUN (h, h -> chunk_size);
   if (!chunk)
     (*obstack_alloc_failed_handler) ();
-  h->next_free = h->object_base = (char*)((uint64_t)(chunk->contents) | mask);
+	// FIXME: offset of contents
+	int content_sz = size - (offsetof(struct _obstack_chunk, contents) + OBJ_HEADER_SIZE);
+  h->next_free = h->object_base = (char*)(make_obj_header((void*)(chunk->contents), content_sz));
   h->chunk_limit = chunk->limit
     = (char *) chunk + h->chunk_size;
 	h->chunk_limit = chunk->limit = (char*)(((uint64_t)h->chunk_limit) | mask);
