@@ -2692,9 +2692,10 @@ void* je_san_page_fault_call(void *ptr, int line, char *name) {
 JEMALLOC_EXPORT
 void* je_san_page_fault_len(void *ptr, int line, char *name) {
 	unsigned *optr = (unsigned*)(((unsigned long long)ptr) & 0x7fffffffffffffffULL);
-	//malloc_printf("len: ptr:%p %s():%d\n", ptr, name, line);
+	malloc_printf("len: ptr:%p %s():%d\n", ptr, name, line);
 	unsigned magic = *(optr-1);
 	unsigned *head;
+	malloc_printf("magic:%x size:%x\n", magic, optr[0]);
 	if (magic != 0xdeadface) {
 		head = _je_san_get_base(optr);
 		assert(head[0] == 0xdeadface);
@@ -2712,6 +2713,95 @@ void* je_san_page_fault_len(void *ptr, int line, char *name) {
 	}
 	return optr;
 }
+
+#include <obstack.h>
+
+JEMALLOC_EXPORT
+void je__obstack_newchunk(struct obstack *ob, int len) {
+	assert(0);
+}
+
+struct fooalign {char x; double d;};
+#define DEFAULT_ALIGNMENT  \
+  ((PTR_INT_TYPE) ((char *) &((struct fooalign *) 0)->d - (char *) 0))
+
+union fooround {long x; double d;};
+#define DEFAULT_ROUNDING (sizeof (union fooround))
+
+#if defined (__STDC__) && __STDC__
+#define CALL_CHUNKFUN(h, size) \
+  (((h) -> use_extra_arg) \
+   ? (*(h)->chunkfun) ((h)->extra_arg, (size)) \
+   : (*(struct _obstack_chunk *(*) (long)) (h)->chunkfun) ((size)))
+
+#define CALL_FREEFUN(h, old_chunk) \
+  do { \
+    if ((h) -> use_extra_arg) \
+      (*(h)->freefun) ((h)->extra_arg, (old_chunk)); \
+    else \
+      (*(void (*) (void *)) (h)->freefun) ((old_chunk)); \
+  } while (0)
+#else
+#define CALL_CHUNKFUN(h, size) \
+  (((h) -> use_extra_arg) \
+   ? (*(h)->chunkfun) ((h)->extra_arg, (size)) \
+   : (*(struct _obstack_chunk *(*) ()) (h)->chunkfun) ((size)))
+
+#define CALL_FREEFUN(h, old_chunk) \
+  do { \
+    if ((h) -> use_extra_arg) \
+      (*(h)->freefun) ((h)->extra_arg, (old_chunk)); \
+    else \
+      (*(void (*) ()) (h)->freefun) ((old_chunk)); \
+  } while (0)
+#endif
+
+JEMALLOC_EXPORT
+int je__obstack_begin (struct obstack *h, int size, int alignment,
+         void *(*chunkfun)(long), void (*freefun)(void *)) {
+
+	register struct _obstack_chunk *chunk; /* points to new chunk */
+	uint64_t mask = (1ULL << 63);
+
+  if (alignment == 0)
+    alignment = (int) DEFAULT_ALIGNMENT;
+  if (size == 0)
+    /* Default size is what GNU malloc can fit in a 4096-byte block.  */
+    {
+      /* 12 is sizeof (mhead) and 4 is EXTRA from GNU malloc.
+   Use the values for range checking, because if range checking is off,
+   the extra bytes won't be missed terribly, but if range checking is on
+   and we used a larger request, a whole extra 4096 bytes would be
+   allocated.
+
+   These number are irrelevant to the new GNU malloc.  I suspect it is
+   less sensitive to the size of the request.  */
+      int extra = ((((12 + DEFAULT_ROUNDING - 1) & ~(DEFAULT_ROUNDING - 1))
+        + 4 + DEFAULT_ROUNDING - 1)
+       & ~(DEFAULT_ROUNDING - 1));
+      size = 4096 - extra;
+    }
+
+  h->chunkfun = (struct _obstack_chunk * (*)(void *, long)) chunkfun;
+  h->freefun = (void (*) (void *, struct _obstack_chunk *)) freefun;
+  h->chunk_size = size;
+  h->alignment_mask = alignment - 1;
+  h->use_extra_arg = 0;
+
+  chunk = h->chunk = CALL_CHUNKFUN (h, h -> chunk_size);
+  if (!chunk)
+    (*obstack_alloc_failed_handler) ();
+  h->next_free = h->object_base = (char*)((uint64_t)(chunk->contents) | mask);
+  h->chunk_limit = chunk->limit
+    = (char *) chunk + h->chunk_size;
+	h->chunk_limit = chunk->limit = (char*)(((uint64_t)h->chunk_limit) | mask);
+  chunk->prev = 0;
+  /* The initial chunk now contains no empty object.  */
+  h->maybe_empty_object = 0;
+  h->alloc_failed = 0;
+  return 1;
+}
+
 
 #if 0
 #include <execinfo.h>
