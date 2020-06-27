@@ -2716,17 +2716,15 @@ void* je_san_page_fault_len(void *ptr, int line, char *name) {
 
 #include <obstack.h>
 
-JEMALLOC_EXPORT
-void je__obstack_newchunk(struct obstack *ob, int len) {
-	assert(0);
-}
-
 struct fooalign {char x; double d;};
 #define DEFAULT_ALIGNMENT  \
   ((PTR_INT_TYPE) ((char *) &((struct fooalign *) 0)->d - (char *) 0))
 
 union fooround {long x; double d;};
 #define DEFAULT_ROUNDING (sizeof (union fooround))
+#ifndef COPYING_UNIT
+#define COPYING_UNIT int
+#endif
 
 #if defined (__STDC__) && __STDC__
 #define CALL_CHUNKFUN(h, size) \
@@ -2755,6 +2753,75 @@ union fooround {long x; double d;};
       (*(void (*) ()) (h)->freefun) ((old_chunk)); \
   } while (0)
 #endif
+
+#define UNMASK(x) ((char*)((((uint64_t)(x)) << 2) >> 2))
+
+JEMALLOC_EXPORT
+void je__obstack_newchunk(struct obstack *h, int length) {
+  register struct _obstack_chunk *old_chunk = (struct _obstack_chunk*)UNMASK(h->chunk);
+  register struct _obstack_chunk *new_chunk;
+  register long new_size;
+	char *object_base = UNMASK(h->object_base);
+	char *next_free = UNMASK(h->next_free);
+  register long obj_size = next_free - object_base + OBJ_HEADER_SIZE;
+  register long i;
+	int size;
+  long already;
+	uint64_t mask = (1ULL << 63);
+
+  /* Compute size for new chunk.  */
+  new_size = (obj_size + length + OBJ_HEADER_SIZE) + (obj_size >> 3) + 100;
+  if (new_size < h->chunk_size)
+    new_size = h->chunk_size;
+
+  /* Allocate and initialize the new chunk.  */
+  new_chunk = CALL_CHUNKFUN (h, new_size);
+  if (!new_chunk)
+    (*obstack_alloc_failed_handler) ();
+  h->chunk = new_chunk;
+  new_chunk->prev = old_chunk;
+  new_chunk->limit = h->chunk_limit = (char *) new_chunk + new_size;
+
+  /* Move the existing object to the new chunk.
+     Word at a time is fast and is safe if the object
+     is sufficiently aligned.  */
+  if (h->alignment_mask + 1 >= DEFAULT_ALIGNMENT)
+    {
+      for (i = obj_size / sizeof (COPYING_UNIT) - 1;
+     i >= 0; i--)
+  ((COPYING_UNIT *)new_chunk->contents)[i]
+    = ((COPYING_UNIT *)object_base)[i];
+      /* We used to copy the odd few remaining bytes as one extra COPYING_UNIT,
+   but that can cross a page boundary on a machine
+   which does not do strict alignment for COPYING_UNITS.  */
+      already = obj_size / sizeof (COPYING_UNIT) * sizeof (COPYING_UNIT);
+    }
+  else
+    already = 0;
+  /* Copy remaining bytes one by one.  */
+  for (i = already; i < obj_size; i++)
+    new_chunk->contents[i] = object_base[i];
+
+	char *old_contents = UNMASK(old_chunk->contents) + OBJ_HEADER_SIZE;
+	/* If the object just copied was the only data in OLD_CHUNK,
+     free that chunk and remove it from the chain.
+     But not if that chunk might contain an empty object.  */
+  if (object_base == old_contents && ! h->maybe_empty_object)
+    {
+      new_chunk->prev = old_chunk->prev;
+      CALL_FREEFUN (h, old_chunk);
+    }
+
+  h->object_base = new_chunk->contents;
+  h->next_free = h->object_base + obj_size;
+	size = (h->chunk_limit - h->object_base) - OBJ_HEADER_SIZE;
+  h->object_base = (char*)(make_obj_header((void*)(h->object_base), size));
+	size = (h->chunk_limit - h->next_free) - OBJ_HEADER_SIZE;
+  h->next_free = (char*)(make_obj_header((void*)(h->next_free), size));
+	h->chunk_limit = new_chunk->limit = (char*)(((uint64_t)h->chunk_limit) | mask);
+  /* The new chunk certainly contains no empty object yet.  */
+  h->maybe_empty_object = 0;
+}
 
 JEMALLOC_EXPORT
 int je__obstack_begin (struct obstack *h, int size, int alignment,
