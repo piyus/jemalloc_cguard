@@ -110,6 +110,7 @@ nstime_get(nstime_t *time) {
 
 	nstime_init(time, ticks_100ns * 100);
 }
+/*
 #elif defined(JEMALLOC_HAVE_CLOCK_MONOTONIC_COARSE)
 #  define NSTIME_MONOTONIC true
 static void
@@ -134,6 +135,7 @@ static void
 nstime_get(nstime_t *time) {
 	nstime_init(time, mach_absolute_time());
 }
+*/
 #else
 #  define NSTIME_MONOTONIC false
 static void
