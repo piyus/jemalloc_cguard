@@ -19,6 +19,7 @@
 #include "jemalloc/internal/sz.h"
 #include "jemalloc/internal/ticker.h"
 #include "jemalloc/internal/util.h"
+#include <obstack.h>
 
 struct obj_header {
 	unsigned magic;
@@ -33,7 +34,7 @@ struct obj_header {
 
 #ifndef NO_SAFETY
 
-#define MAX_LARGE_PTRS 1024
+#define MAX_LARGE_PTRS 102400
 static void *large_ptrs[MAX_LARGE_PTRS];
 static int num_large_ptrs = 0;
 
@@ -110,7 +111,7 @@ static void *make_obj_header(void *ptr, size_t size) {
 		add_large_pointer(ptr);
 	}
 
-	malloc_printf("mal ptr:%p sz:%zd\n", ptr, size);
+	//malloc_printf("mal ptr:%p sz:%zd\n", ptr, size);
 	struct obj_header *header = (struct obj_header*)ptr;
 	header->magic = MAGIC_NUMBER;
 	header->size = (unsigned)size;
@@ -124,8 +125,8 @@ static void *get_obj_header(void *ptr) {
 	struct obj_header *header = ((struct obj_header*)ptr) - 1;
 	assert(header->magic == MAGIC_NUMBER);
 	if (header->size  > SC_SMALL_MAXCLASS - OBJ_HEADER_SIZE) {
-		assert(search_large_pointer(ptr));
-		assert(search_large_pointer(ptr+header->size-1));
+		//assert(search_large_pointer(ptr));
+		//assert(search_large_pointer(ptr+header->size-1));
 		remove_large_pointer(header);
 	}
 	return header;
@@ -2569,7 +2570,23 @@ static void* get_stack_ptr_base(void *ptr) {
 
 #define STACK_SIZE (8092 * 1024)
 
+struct obj_header fake_header = {MAGIC_NUMBER, 0xfffffff};
+
+static void *get_global_header(unsigned *ptr) {
+	int iter = 0;
+	while (ptr[0] != MAGIC_NUMBER && iter++ < 10000) {
+		ptr--;
+	}
+	if (ptr[0] != MAGIC_NUMBER) {
+		return &fake_header;
+	}
+	return ptr;
+}
+
 static void *_je_san_get_base(void *ptr) {
+	if (ptr < (void*)0x80000000) {
+		return get_global_header(ptr);
+	}
 	int stack_var;
 	//char *stack_end = (char*)&stack_var;
 	//char *stack_start = stack_end + STACK_SIZE;
@@ -2624,7 +2641,7 @@ JEMALLOC_EXPORT
 void* je_san_page_fault_load(void *ptr, int line, char *name) {
 	//malloc_printf("1. store: ptr:%p val:%p\n", ptr, val);
 	void *optr = (void*)(((unsigned long long)ptr) & 0x7fffffffffffffffULL);
-	//malloc_printf("load: ptr:%p val:%p %s():%d\n", ptr, *((char**)optr), name, line);
+	malloc_printf("load: ptr:%p val:%p %s():%d\n", ptr, *((char**)optr), name, line);
 #if 0
 	void *oval = (void*)(((unsigned long long)val) & 0x7fffffffffffffffULL);
 	if (oval) {
@@ -2646,7 +2663,7 @@ JEMALLOC_EXPORT
 void* je_san_page_fault_store(void *ptr, void *val, int line, char *name) {
 	//malloc_printf("1. store: ptr:%p val:%p\n", ptr, val);
 	void *optr = (void*)(((unsigned long long)ptr) & 0x7fffffffffffffffULL);
-	//malloc_printf("store: ptr:%p val:%p %s():%d\n", ptr, val, name, line);
+	malloc_printf("store: ptr:%p val:%p %s():%d\n", ptr, val, name, line);
 #if 0
 	void *oval = (void*)(((unsigned long long)val) & 0x7fffffffffffffffULL);
 	if (oval) {
@@ -2666,7 +2683,7 @@ void* je_san_page_fault_store(void *ptr, void *val, int line, char *name) {
 
 JEMALLOC_EXPORT
 void je_san_page_fault_arg(void *ptr, int line, char *name) {
-	//malloc_printf("arg: ptr:%p %s():%d\n", ptr, name, line);
+	malloc_printf("arg: ptr:%p %s():%d\n", ptr, name, line);
 	//void *base = NULL; //je_san_get_base(optr);
 	//printf("base:%p optr:%p ptr:%p\n", base, optr, ptr);
 }
@@ -2674,7 +2691,7 @@ void je_san_page_fault_arg(void *ptr, int line, char *name) {
 JEMALLOC_EXPORT
 void* je_san_page_fault(void *ptr, int line, char *name) {
 	void *optr = (void*)(((unsigned long long)ptr) & 0x7fffffffffffffffULL);
-	//malloc_printf("ld/st: ptr:%p %s():%d\n", ptr, name, line);
+	malloc_printf("ld/st: ptr:%p %s():%d\n", ptr, name, line);
 	//void *base = NULL; //je_san_get_base(optr);
 	//printf("base:%p optr:%p ptr:%p\n", base, optr, ptr);
 	return optr;
@@ -2683,11 +2700,13 @@ void* je_san_page_fault(void *ptr, int line, char *name) {
 JEMALLOC_EXPORT
 void* je_san_page_fault_call(void *ptr, int line, char *name) {
 	void *optr = (void*)(((unsigned long long)ptr) & 0x7fffffffffffffffULL);
-	//malloc_printf("call: ptr:%p %s():%d\n", ptr, name, line);
+	malloc_printf("call: ptr:%p %s():%d\n", ptr, name, line);
 	//void *base = NULL; //je_san_get_base(optr);
 	//printf("base:%p optr:%p ptr:%p\n", base, optr, ptr);
 	return optr;
 }
+
+static void print_all_obstack();
 
 JEMALLOC_EXPORT
 void* je_san_page_fault_len(void *ptr, int line, char *name) {
@@ -2701,8 +2720,11 @@ void* je_san_page_fault_len(void *ptr, int line, char *name) {
 		assert(head[0] == 0xdeadface);
 		if (ptr == optr) {
 			malloc_printf("ptr:%p head:%p\n", optr, head);
+			print_all_obstack();
 		}
-		assert(ptr != (void*)optr);
+		if (ptr > (void*)0x80000000) {
+			assert(ptr != (void*)optr);
+		}
 		optr = head + 1;
 	}
 	else {
@@ -2714,8 +2736,7 @@ void* je_san_page_fault_len(void *ptr, int line, char *name) {
 	return optr;
 }
 
-#include <obstack.h>
-
+#if 0
 struct fooalign {char x; double d;};
 #define DEFAULT_ALIGNMENT  \
   ((PTR_INT_TYPE) ((char *) &((struct fooalign *) 0)->d - (char *) 0))
@@ -2753,11 +2774,86 @@ union fooround {long x; double d;};
       (*(void (*) ()) (h)->freefun) ((old_chunk)); \
   } while (0)
 #endif
+#endif
 
 #define UNMASK(x) ((char*)((((uint64_t)(x)) << 2) >> 2))
+#define _MASK(x) ((char*)((((uint64_t)(x)) | (1ULL << 63))))
+
+#include <dlfcn.h>
+
+static void *get_func_addr(const char *name, void *wrapper) {
+  void *addr = dlsym(RTLD_NEXT, name);
+  if (!addr) {
+    addr = dlsym(RTLD_DEFAULT, name);
+    if (addr == wrapper) {
+			assert(0);
+      return NULL;
+		}
+  }
+	assert(addr != wrapper);
+	assert(addr);
+  return addr;
+}
+
+
+JEMALLOC_EXPORT
+int je_vasprintf(char **strp, const char *fmt, va_list ap)
+{
+	unsigned long long *reg_save_area, *mem_save_area;
+	unsigned long long mask;
+	int i;
+	reg_save_area = *(unsigned long long**)((unsigned long long)ap+16);
+  mem_save_area = *(unsigned long long**)((unsigned long long)ap+8);
+  if (mem_save_area) {
+    for (i = 0; i < 8; i++) {
+			mask = (mem_save_area[i] >> 48);
+			if (mask == 0x8000) {
+				mem_save_area[i] = ((mem_save_area[i] << 1) >> 1);
+			}
+    }
+  }
+  if (reg_save_area) {
+    for (i = 0; i < 8; i++) {
+			mask = (reg_save_area[i] >> 48);
+			if (mask == 0x8000) {
+				reg_save_area[i] = ((reg_save_area[i] << 1) >> 1);
+			}
+    }
+  }
+
+
+	static int (*fptr)(char**, const char*, va_list) = NULL;
+	if (fptr == NULL) {
+		fptr = get_func_addr("vasprintf", je_vasprintf);
+	}
+	return fptr(strp, fmt, ap);
+}
 
 JEMALLOC_EXPORT
 void je__obstack_newchunk(struct obstack *h, int length) {
+	malloc_printf("newchunk\n");
+  struct _obstack_chunk *old_chunk = (struct _obstack_chunk*)UNMASK(h->chunk);
+	h->chunk = old_chunk;
+	old_chunk->limit = UNMASK(old_chunk->limit);
+
+	h->next_free = UNMASK(h->next_free);
+	h->object_base = UNMASK(h->object_base);
+	h->chunk_limit = UNMASK(h->chunk_limit);
+	static void (*fptr)(struct obstack *, int) = NULL;
+	if (fptr == NULL) {
+		fptr = get_func_addr("_obstack_newchunk", je__obstack_newchunk);
+	}
+	fptr(h, length);
+	h->next_free = _MASK(h->next_free);
+	h->object_base = _MASK(h->object_base);
+	h->chunk_limit = _MASK(h->chunk_limit);
+	h->chunk->limit = _MASK(h->chunk->limit);
+	if (h->chunk->prev == old_chunk) {
+		old_chunk->limit = _MASK(old_chunk->limit);
+	}
+	return;
+
+#if 0
   register struct _obstack_chunk *old_chunk = (struct _obstack_chunk*)UNMASK(h->chunk);
   register struct _obstack_chunk *new_chunk;
   register long new_size;
@@ -2821,14 +2917,55 @@ void je__obstack_newchunk(struct obstack *h, int length) {
 	h->chunk_limit = new_chunk->limit = (char*)(((uint64_t)h->chunk_limit) | mask);
   /* The new chunk certainly contains no empty object yet.  */
   h->maybe_empty_object = 0;
+#endif
+}
+
+struct obstack *_obstacks[1024];
+static int num_obstack = 0;
+
+static void register_obstack(struct obstack *h) {
+	assert(num_obstack < 1024);
+	_obstacks[num_obstack] = h;
+	num_obstack++;
+}
+
+static void print_all_obstack() {
+	int i;
+	for (i = 0; i < num_obstack; i++) {
+		struct obstack *h = _obstacks[i];
+		malloc_printf("ob%d: free:%p base:%p lim:%p\n", i, h->next_free, h->object_base, h->chunk_limit);
+	}
 }
 
 JEMALLOC_EXPORT
 int je__obstack_begin (struct obstack *h, int size, int alignment,
          void *(*chunkfun)(long), void (*freefun)(void *)) {
 
+	malloc_printf("begin\n");
+	h->next_free = UNMASK(h->next_free);
+	h->object_base = UNMASK(h->object_base);
+	h->chunk_limit = UNMASK(h->chunk_limit);
+
+	static int (*fptr)(struct obstack *, int, int, void *(*chunkfun)(long), void (*freefun)(void *)) = NULL;
+	if (fptr == NULL) {
+		fptr = get_func_addr("_obstack_begin", je__obstack_begin);
+	}
+	int ret = fptr(h, size, alignment, chunkfun, freefun);
+
+	h->next_free = _MASK(h->next_free);
+	h->object_base = _MASK(h->object_base);
+	h->chunk_limit = _MASK(h->chunk_limit);
+	h->chunk->limit = _MASK(h->chunk->limit);
+
+	register_obstack(h);
+
+	malloc_printf("begin: free:%p base:%p lim:%p\n", h->next_free, h->object_base, h->chunk_limit);
+
+	return ret;
+
+#if 0
 	register struct _obstack_chunk *chunk; /* points to new chunk */
-	uint64_t mask = (1ULL << 63);
+	uint64_t mask = 0; //(1ULL << 63);
 
   if (alignment == 0)
     alignment = (int) DEFAULT_ALIGNMENT;
@@ -2869,6 +3006,7 @@ int je__obstack_begin (struct obstack *h, int size, int alignment,
   h->maybe_empty_object = 0;
   h->alloc_failed = 0;
   return 1;
+#endif
 }
 
 
