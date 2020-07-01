@@ -21,6 +21,8 @@
 #include "jemalloc/internal/util.h"
 #include <obstack.h>
 
+#undef obstack_free
+
 struct obj_header {
 	unsigned magic;
 	unsigned size;
@@ -2765,6 +2767,8 @@ union fooround {long x; double d;};
   (((h) -> use_extra_arg) \
    ? (*(h)->chunkfun) ((h)->extra_arg, (size)) \
    : (*(struct _obstack_chunk *(*) ()) (h)->chunkfun) ((size)))
+#endif
+#endif
 
 #define CALL_FREEFUN(h, old_chunk) \
   do { \
@@ -2773,8 +2777,6 @@ union fooround {long x; double d;};
     else \
       (*(void (*) ()) (h)->freefun) ((old_chunk)); \
   } while (0)
-#endif
-#endif
 
 #define UNMASK(x) ((char*)((((uint64_t)(x)) << 2) >> 2))
 #define _MASK(x) ((char*)((((uint64_t)(x)) | (1ULL << 63))))
@@ -2828,6 +2830,58 @@ int je_vasprintf(char **strp, const char *fmt, va_list ap)
 	}
 	return fptr(strp, fmt, ap);
 }
+
+JEMALLOC_EXPORT
+void je_obstack_free(struct obstack *h, void *_obj) {
+	char *obj = (char*)_obj;
+  register struct _obstack_chunk *lp;	/* below addr of any objects in this chunk */
+  register struct _obstack_chunk *plp;	/* point to previous chunk if any */
+
+  lp = (struct _obstack_chunk*)UNMASK(h->chunk);
+  /* We use >= because there cannot be an object at the beginning of a chunk.
+     But there can be an empty object at that address
+     at the end of another chunk.  */
+  while (lp != 0)
+    {
+			char *limit = UNMASK(lp->limit);
+			if (!((char*)lp >= obj || limit < obj)) {
+				break;
+			}
+      plp = (struct _obstack_chunk*)UNMASK(lp->prev);
+      CALL_FREEFUN (h, lp);
+      lp = plp;
+      /* If we switch chunks, we can't tell whether the new current
+	 chunk contains an empty object, so assume that it may.  */
+      h->maybe_empty_object = 1;
+    }
+  if (lp)
+    {
+      h->object_base = h->next_free = obj;
+      h->chunk_limit = lp->limit;
+      h->chunk = lp;
+			h->next_free = _MASK(h->next_free);
+			h->object_base = _MASK(h->object_base);
+			h->chunk_limit = _MASK(h->chunk_limit);
+    }
+  else if (obj != 0)
+    /* obj is not in any of the chunks! */
+    abort ();
+}
+
+JEMALLOC_EXPORT
+int je__obstack_memory_used (struct obstack *h)
+{
+  register struct _obstack_chunk* lp;
+  register int nbytes = 0;
+
+  for (lp = h->chunk; lp != 0; lp = lp->prev)
+    {
+			lp = (struct _obstack_chunk*)UNMASK(lp);
+      nbytes += UNMASK(lp->limit) - (char *) lp;
+    }
+  return nbytes;
+}
+
 
 JEMALLOC_EXPORT
 void je__obstack_newchunk(struct obstack *h, int length) {
