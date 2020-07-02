@@ -2797,6 +2797,20 @@ static void *get_func_addr(const char *name, void *wrapper) {
   return addr;
 }
 
+JEMALLOC_EXPORT
+ssize_t je___getdelim(char **_lineptr, size_t *_n, int delim, FILE *_stream)
+{
+	char **lineptr = (char**)UNMASK(_lineptr);
+	size_t *n = (size_t*)UNMASK(_n);
+	FILE *stream = (FILE*)UNMASK(_stream);
+	lineptr[0] = UNMASK(lineptr[0]);
+
+	static ssize_t (*fptr)(char**, size_t*, int, FILE*) = NULL;
+	if (fptr == NULL) {
+		fptr = get_func_addr("__getdelim", je___getdelim);
+	}
+	return fptr(lineptr, n, delim, stream);
+}
 
 JEMALLOC_EXPORT
 int je_vasprintf(char **strp, const char *fmt, va_list ap)
