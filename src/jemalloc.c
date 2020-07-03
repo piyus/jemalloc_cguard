@@ -36,6 +36,7 @@ struct obj_header {
 
 #ifndef NO_SAFETY
 
+static char *je_stack_begin = NULL;
 #define MAX_LARGE_PTRS 102400
 static void *large_ptrs[MAX_LARGE_PTRS];
 static int num_large_ptrs = 0;
@@ -2585,20 +2586,27 @@ static void *get_global_header(unsigned *ptr) {
 	return ptr;
 }
 
+static bool is_stack_ptr(char *ptr) {
+	assert(je_stack_begin != NULL);
+	char stack_var;
+	char *lower = &stack_var;
+	char *higher = je_stack_begin;
+	return ptr >= lower && ptr <= higher;
+}
+
 static void *_je_san_get_base(void *ptr) {
 	if (ptr < (void*)0x80000000) {
 		return get_global_header(ptr);
 	}
-	int stack_var;
-	//char *stack_end = (char*)&stack_var;
-	//char *stack_start = stack_end + STACK_SIZE;
-	//malloc_printf("get_base: %p stack:%p\n", ptr, &stack_var);
-	//if ((char*)ptr <= stack_start && (char*)ptr > stack_end) {
+	if (is_stack_ptr(ptr)) {
 		unsigned *ret = get_stack_ptr_base(ptr);
 		if (ret) {
 			return ret;
 		}
-	//}
+		else {
+			return &fake_header;
+		}
+	}
 
 	tsd_t *tsd = tsd_fetch_min();
 	tsdn_t *tsdn = tsd_tsdn(tsd);
@@ -2612,7 +2620,7 @@ static void *_je_san_get_base(void *ptr) {
 	}
 	if (!e) {
 		failed_large(ptr);
-		malloc_printf("unable to find the base of : %p stack:%p base:%p\n", ptr, &stack_var, ptr_page);
+		malloc_printf("unable to find the base of : %p base:%p\n", ptr, ptr_page);
 	}
 	assert(e);
 	char *eaddr = extent_addr_get(e);
@@ -2724,7 +2732,7 @@ void* je_san_page_fault_len(void *ptr, int line, char *name) {
 			malloc_printf("ptr:%p head:%p\n", optr, head);
 			print_all_obstack();
 		}
-		if (ptr > (void*)0x80000000) {
+		if (ptr > (void*)0x80000000 && !is_stack_ptr(ptr)) {
 			assert(ptr != (void*)optr);
 		}
 		optr = head + 1;
@@ -3109,6 +3117,9 @@ static void myfunc3(void)
 
 JEMALLOC_EXPORT
 void je_san_abort2(void *base, void *cur, void *limit, void *ptrlimit, void *size, void *callsite) {
+	if (UNMASK(base) < (char*)0x80000000 || is_stack_ptr(UNMASK(base))) {
+		return;
+	}
 	if (cur < base) {
 		void *_base = (void*)((unsigned long long)base & 0x7fffffffffffffff);
 		void *_cur = (void*)((unsigned long long)cur & 0x7fffffffffffffff);
@@ -3125,8 +3136,10 @@ void je_san_abort2(void *base, void *cur, void *limit, void *ptrlimit, void *siz
 	abort();
 }
 
+
 JEMALLOC_EXPORT
 void* je_san_copy_argv(int argc, char **argv) {
+	je_stack_begin = (char*)&argc;
 	assert(argc >= 1);
 	int i;
 	int argv_size = argc * sizeof(char*);
