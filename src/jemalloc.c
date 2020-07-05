@@ -116,7 +116,7 @@ static void *make_obj_header(void *ptr, size_t size) {
 		add_large_pointer(ptr);
 	}
 
-	//malloc_printf("mal ptr:%p sz:%zd\n", ptr, size);
+	malloc_printf("mal ptr:%p sz:%zd\n", ptr, size);
 	struct obj_header *header = (struct obj_header*)ptr;
 	header->magic = MAGIC_NUMBER;
 	header->size = (unsigned)size;
@@ -2667,7 +2667,7 @@ JEMALLOC_EXPORT
 void* je_san_page_fault_load(void *ptr, int line, char *name) {
 	//malloc_printf("1. store: ptr:%p val:%p\n", ptr, val);
 	void *optr = (void*)(((unsigned long long)ptr) & 0x7fffffffffffffffULL);
-	malloc_printf("load: ptr:%p val:%p %s():%x\n", ptr, *((char**)optr), name, line);
+	malloc_printf("load: ptr:%p val:%p %s():%d %d %d\n", ptr, *((char**)optr), name, (line & 0xffff), (line>>16), line);
 #if 0
 	void *oval = (void*)(((unsigned long long)val) & 0x7fffffffffffffffULL);
 	if (oval) {
@@ -2689,7 +2689,7 @@ JEMALLOC_EXPORT
 void* je_san_page_fault_store(void *ptr, void *val, int line, char *name) {
 	//malloc_printf("1. store: ptr:%p val:%p\n", ptr, val);
 	void *optr = (void*)(((unsigned long long)ptr) & 0x7fffffffffffffffULL);
-	malloc_printf("store: ptr:%p val:%p %s():%x\n", ptr, val, name, line);
+	malloc_printf("store: ptr:%p val:%p %s():%d %d %d\n", ptr, val, name, (line & 0xffff), (line>>16), line);
 #if 0
 	void *oval = (void*)(((unsigned long long)val) & 0x7fffffffffffffffULL);
 	if (oval) {
@@ -2709,7 +2709,7 @@ void* je_san_page_fault_store(void *ptr, void *val, int line, char *name) {
 
 JEMALLOC_EXPORT
 void je_san_page_fault_arg(void *ptr, int line, char *name) {
-	malloc_printf("arg: ptr:%p %s():%x\n", ptr, name, line);
+	malloc_printf("arg: ptr:%p %s():%d %d %d\n", ptr, name, (line & 0xffff), (line>>16), line);
 	//void *base = NULL; //je_san_get_base(optr);
 	//printf("base:%p optr:%p ptr:%p\n", base, optr, ptr);
 }
@@ -2717,7 +2717,7 @@ void je_san_page_fault_arg(void *ptr, int line, char *name) {
 JEMALLOC_EXPORT
 void* je_san_page_fault(void *ptr, int line, char *name) {
 	void *optr = (void*)(((unsigned long long)ptr) & 0x7fffffffffffffffULL);
-	malloc_printf("ld/st: ptr:%p %s():%x\n", ptr, name, line);
+	malloc_printf("ld/st: ptr:%p %s():%d %d %d\n", ptr, name, (line & 0xffff), (line>>16), line);
 	//void *base = NULL; //je_san_get_base(optr);
 	//printf("base:%p optr:%p ptr:%p\n", base, optr, ptr);
 	return optr;
@@ -2726,7 +2726,7 @@ void* je_san_page_fault(void *ptr, int line, char *name) {
 JEMALLOC_EXPORT
 void* je_san_page_fault_call(void *ptr, int line, char *name) {
 	void *optr = (void*)(((unsigned long long)ptr) & 0x7fffffffffffffffULL);
-	malloc_printf("call: ptr:%p %s():%x\n", ptr, name, line);
+	malloc_printf("call: ptr:%p %s():%d %d %d\n", ptr, name, (line & 0xffff), (line>>16), line);
 	//void *base = NULL; //je_san_get_base(optr);
 	//printf("base:%p optr:%p ptr:%p\n", base, optr, ptr);
 	return optr;
@@ -2737,7 +2737,7 @@ static void print_all_obstack();
 JEMALLOC_EXPORT
 void* je_san_page_fault_len(void *ptr, int line, char *name) {
 	unsigned *optr = (unsigned*)(((unsigned long long)ptr) & 0x7fffffffffffffffULL);
-	malloc_printf("len: ptr:%p %s():%x\n", ptr, name, line);
+	malloc_printf("len: ptr:%p %s():%d %d %d\n", ptr, name, (line & 0xffff), (line>>16), line);
 	unsigned magic = *(optr-1);
 	unsigned *head;
 	malloc_printf("magic:%x size:%x\n", magic, optr[0]);
