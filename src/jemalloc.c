@@ -41,6 +41,8 @@ static char *je_stack_begin = NULL;
 static void *large_ptrs[MAX_LARGE_PTRS];
 static int num_large_ptrs = 0;
 
+#define UNMASK(x) ((char*)((((uint64_t)(x)) << 2) >> 2))
+#define _MASK(x) ((char*)((((uint64_t)(x)) | (1ULL << 63))))
 
 static void failed_large(void *ptr) {
 	int i;
@@ -2560,6 +2562,9 @@ static void* get_stack_ptr_base(void *ptr) {
 			unsigned size = sizeptr[0];
 			if ((char*)ptr < ((char*)stack_ptrs[i]) + size) {
 				unsigned *ret = sizeptr - 1;
+				if (ret[0] != 0xdeadface) {
+					return NULL;
+				}
 				assert(ret[0] == 0xdeadface);
 				return ret;
 			}
@@ -2648,10 +2653,21 @@ void* je_san_get_base(void *ptr) {
 }
 
 JEMALLOC_EXPORT
+char* je_san_make_interior(char *ptr) {
+	char* optr = UNMASK(ptr);
+	assert(optr != ptr);
+	char *base = (char*)je_san_get_base(ptr);
+	if (base != ptr) {
+		return _MASK(ptr);
+	}
+	return ptr;
+}
+
+JEMALLOC_EXPORT
 void* je_san_page_fault_load(void *ptr, int line, char *name) {
 	//malloc_printf("1. store: ptr:%p val:%p\n", ptr, val);
 	void *optr = (void*)(((unsigned long long)ptr) & 0x7fffffffffffffffULL);
-	malloc_printf("load: ptr:%p val:%p %s():%d\n", ptr, *((char**)optr), name, line);
+	malloc_printf("load: ptr:%p val:%p %s():%x\n", ptr, *((char**)optr), name, line);
 #if 0
 	void *oval = (void*)(((unsigned long long)val) & 0x7fffffffffffffffULL);
 	if (oval) {
@@ -2673,7 +2689,7 @@ JEMALLOC_EXPORT
 void* je_san_page_fault_store(void *ptr, void *val, int line, char *name) {
 	//malloc_printf("1. store: ptr:%p val:%p\n", ptr, val);
 	void *optr = (void*)(((unsigned long long)ptr) & 0x7fffffffffffffffULL);
-	malloc_printf("store: ptr:%p val:%p %s():%d\n", ptr, val, name, line);
+	malloc_printf("store: ptr:%p val:%p %s():%x\n", ptr, val, name, line);
 #if 0
 	void *oval = (void*)(((unsigned long long)val) & 0x7fffffffffffffffULL);
 	if (oval) {
@@ -2693,7 +2709,7 @@ void* je_san_page_fault_store(void *ptr, void *val, int line, char *name) {
 
 JEMALLOC_EXPORT
 void je_san_page_fault_arg(void *ptr, int line, char *name) {
-	malloc_printf("arg: ptr:%p %s():%d\n", ptr, name, line);
+	malloc_printf("arg: ptr:%p %s():%x\n", ptr, name, line);
 	//void *base = NULL; //je_san_get_base(optr);
 	//printf("base:%p optr:%p ptr:%p\n", base, optr, ptr);
 }
@@ -2701,7 +2717,7 @@ void je_san_page_fault_arg(void *ptr, int line, char *name) {
 JEMALLOC_EXPORT
 void* je_san_page_fault(void *ptr, int line, char *name) {
 	void *optr = (void*)(((unsigned long long)ptr) & 0x7fffffffffffffffULL);
-	malloc_printf("ld/st: ptr:%p %s():%d\n", ptr, name, line);
+	malloc_printf("ld/st: ptr:%p %s():%x\n", ptr, name, line);
 	//void *base = NULL; //je_san_get_base(optr);
 	//printf("base:%p optr:%p ptr:%p\n", base, optr, ptr);
 	return optr;
@@ -2710,7 +2726,7 @@ void* je_san_page_fault(void *ptr, int line, char *name) {
 JEMALLOC_EXPORT
 void* je_san_page_fault_call(void *ptr, int line, char *name) {
 	void *optr = (void*)(((unsigned long long)ptr) & 0x7fffffffffffffffULL);
-	malloc_printf("call: ptr:%p %s():%d\n", ptr, name, line);
+	malloc_printf("call: ptr:%p %s():%x\n", ptr, name, line);
 	//void *base = NULL; //je_san_get_base(optr);
 	//printf("base:%p optr:%p ptr:%p\n", base, optr, ptr);
 	return optr;
@@ -2721,7 +2737,7 @@ static void print_all_obstack();
 JEMALLOC_EXPORT
 void* je_san_page_fault_len(void *ptr, int line, char *name) {
 	unsigned *optr = (unsigned*)(((unsigned long long)ptr) & 0x7fffffffffffffffULL);
-	malloc_printf("len: ptr:%p %s():%d\n", ptr, name, line);
+	malloc_printf("len: ptr:%p %s():%x\n", ptr, name, line);
 	unsigned magic = *(optr-1);
 	unsigned *head;
 	malloc_printf("magic:%x size:%x\n", magic, optr[0]);
@@ -2786,8 +2802,6 @@ union fooround {long x; double d;};
       (*(void (*) ()) (h)->freefun) ((old_chunk)); \
   } while (0)
 
-#define UNMASK(x) ((char*)((((uint64_t)(x)) << 2) >> 2))
-#define _MASK(x) ((char*)((((uint64_t)(x)) | (1ULL << 63))))
 
 #include <dlfcn.h>
 
