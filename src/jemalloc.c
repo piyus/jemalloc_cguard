@@ -41,8 +41,9 @@ static char *je_stack_begin = NULL;
 static void *large_ptrs[MAX_LARGE_PTRS];
 static int num_large_ptrs = 0;
 
-#define UNMASK(x) ((char*)((((uint64_t)(x)) << 2) >> 2))
-#define _MASK(x) ((char*)((((uint64_t)(x)) | (1ULL << 63))))
+#define INTERIOR_STR 0xcabeULL
+#define UNMASK(x) ((char*)((((uint64_t)(x)) & 0xffffffffffffULL)))
+#define _MASK(x) ((char*)((((uint64_t)(x)) | (INTERIOR_STR << 48))))
 
 static void failed_large(void *ptr) {
 	int i;
@@ -2523,7 +2524,7 @@ _je_malloc(size_t size) {
 	return malloc_default(size);
 }
 
-#define MAX_STACK_PTRS 1024
+#define MAX_STACK_PTRS 10240
 static void *stack_ptrs[MAX_STACK_PTRS];
 static int num_stack_ptrs = 0;
 
@@ -2664,9 +2665,17 @@ char* je_san_make_interior(char *ptr) {
 }
 
 JEMALLOC_EXPORT
+void je_san_icmp(unsigned long long val1, unsigned long long val2, int line, char *name) {
+	if ((val1 >> 48) == INTERIOR_STR || (val2 >> 48) == INTERIOR_STR) {
+		malloc_printf("icmp: val1:%llx val2:%llx %s():%d %d %d\n", val1, val2, name, (line & 0xffff), (line>>16), line);
+		assert(0);
+	}
+}
+
+JEMALLOC_EXPORT
 void* je_san_page_fault_load(void *ptr, int line, char *name) {
 	//malloc_printf("1. store: ptr:%p val:%p\n", ptr, val);
-	void *optr = (void*)(((unsigned long long)ptr) & 0x7fffffffffffffffULL);
+	void *optr = (void*)UNMASK(ptr);
 	malloc_printf("load: ptr:%p val:%p %s():%d %d %d\n", ptr, *((char**)optr), name, (line & 0xffff), (line>>16), line);
 #if 0
 	void *oval = (void*)(((unsigned long long)val) & 0x7fffffffffffffffULL);
@@ -2687,9 +2696,9 @@ void* je_san_page_fault_load(void *ptr, int line, char *name) {
 
 JEMALLOC_EXPORT
 void* je_san_page_fault_store(void *ptr, void *val, int line, char *name) {
-	//malloc_printf("1. store: ptr:%p val:%p\n", ptr, val);
-	void *optr = (void*)(((unsigned long long)ptr) & 0x7fffffffffffffffULL);
-	malloc_printf("store: ptr:%p val:%p %s():%d %d %d\n", ptr, val, name, (line & 0xffff), (line>>16), line);
+	//malloc_printf("1. store: ptr:%p val:%p %s():\n", ptr, val, name);
+	void *optr = (void*)UNMASK(ptr);
+	printf("store: ptr:%p val:%p %d %d %d\n", ptr, val, (line & 0xffff), (line>>16), line);
 #if 0
 	void *oval = (void*)(((unsigned long long)val) & 0x7fffffffffffffffULL);
 	if (oval) {
@@ -2716,7 +2725,7 @@ void je_san_page_fault_arg(void *ptr, int line, char *name) {
 
 JEMALLOC_EXPORT
 void* je_san_page_fault(void *ptr, int line, char *name) {
-	void *optr = (void*)(((unsigned long long)ptr) & 0x7fffffffffffffffULL);
+	void *optr = (void*)UNMASK(ptr);
 	malloc_printf("ld/st: ptr:%p %s():%d %d %d\n", ptr, name, (line & 0xffff), (line>>16), line);
 	//void *base = NULL; //je_san_get_base(optr);
 	//printf("base:%p optr:%p ptr:%p\n", base, optr, ptr);
@@ -2725,7 +2734,7 @@ void* je_san_page_fault(void *ptr, int line, char *name) {
 
 JEMALLOC_EXPORT
 void* je_san_page_fault_call(void *ptr, int line, char *name) {
-	void *optr = (void*)(((unsigned long long)ptr) & 0x7fffffffffffffffULL);
+	void *optr = (void*)UNMASK(ptr);
 	malloc_printf("call: ptr:%p %s():%d %d %d\n", ptr, name, (line & 0xffff), (line>>16), line);
 	//void *base = NULL; //je_san_get_base(optr);
 	//printf("base:%p optr:%p ptr:%p\n", base, optr, ptr);
@@ -2736,7 +2745,7 @@ static void print_all_obstack();
 
 JEMALLOC_EXPORT
 void* je_san_page_fault_len(void *ptr, int line, char *name) {
-	unsigned *optr = (unsigned*)(((unsigned long long)ptr) & 0x7fffffffffffffffULL);
+	unsigned *optr = (unsigned*)UNMASK(ptr);
 	malloc_printf("len: ptr:%p %s():%d %d %d\n", ptr, name, (line & 0xffff), (line>>16), line);
 	unsigned magic = *(optr-1);
 	unsigned *head;
@@ -2845,16 +2854,16 @@ int je_vasprintf(char **strp, const char *fmt, va_list ap)
   if (mem_save_area) {
     for (i = 0; i < 8; i++) {
 			mask = (mem_save_area[i] >> 48);
-			if (mask == 0x8000) {
-				mem_save_area[i] = ((mem_save_area[i] << 1) >> 1);
+			if (mask == INTERIOR_STR) {
+				mem_save_area[i] = (unsigned long long)UNMASK(mem_save_area[i]);
 			}
     }
   }
   if (reg_save_area) {
     for (i = 0; i < 8; i++) {
 			mask = (reg_save_area[i] >> 48);
-			if (mask == 0x8000) {
-				reg_save_area[i] = ((reg_save_area[i] << 1) >> 1);
+			if (mask == INTERIOR_STR) {
+				reg_save_area[i] = (unsigned long long)UNMASK(reg_save_area[i]);
 			}
     }
   }
@@ -3135,8 +3144,8 @@ void je_san_abort2(void *base, void *cur, void *limit, void *ptrlimit, void *siz
 		return;
 	}
 	if (cur < base) {
-		void *_base = (void*)((unsigned long long)base & 0x7fffffffffffffff);
-		void *_cur = (void*)((unsigned long long)cur & 0x7fffffffffffffff);
+		void *_base = (void*)UNMASK(base);
+		void *_cur = (void*)UNMASK(cur);
 		void *orig_base = je_san_get_base(_base);
 		if (orig_base && _cur >= orig_base) {
 			return;
@@ -3680,7 +3689,8 @@ _je_free(void *ptr) {
 }
 
 JEMALLOC_EXPORT void JEMALLOC_NOTHROW
-je_free(void *ptr) {
+je_free(void *_ptr) {
+	void *ptr = (void*)UNMASK(_ptr);
 	void *head = get_obj_header(ptr);
 	//void *head = (ptr) ? je_san_get_base(ptr) : NULL;
 	//assert(is_valid_obj_header(head));
