@@ -36,15 +36,54 @@ struct obj_header {
 
 #ifndef NO_SAFETY
 
+static void *_je_san_get_base(void *ptr);
+
+static void
+extent_interior_register1(tsdn_t *tsdn, rtree_ctx_t *rtree_ctx, extent_t *extent,
+    szind_t szind) {
+	unsigned long long base = (unsigned long long)extent_base_get(extent);
+	size_t size = extent_size_get(extent);
+	//malloc_printf("base: %llx size:%zx\n", base, size);
+	assert((base & 0xfff) == 0);
+
+	/* Register interior. */
+	for (size_t i = 1; i < (size >> LG_PAGE) - 1; i++) {
+		rtree_write(tsdn, &extents_rtree, rtree_ctx,
+		    (uintptr_t)extent_base_get(extent) + (uintptr_t)(i <<
+		    LG_PAGE), extent, szind, false);
+	}
+}
+
+
+static void
+extent_interior_deregister1(tsdn_t *tsdn, rtree_ctx_t *rtree_ctx,
+    extent_t *extent) {
+	size_t i;
+	unsigned long long base = (unsigned long long)extent_base_get(extent);
+	size_t size = extent_size_get(extent);
+	//malloc_printf("de: base: %llx size:%zx\n", base, size);
+	assert((base & 0xfff) == 0);
+
+	for (i = 1; i < (size >> LG_PAGE) - 1; i++) {
+		rtree_clear(tsdn, &extents_rtree, rtree_ctx,
+		    (uintptr_t)extent_base_get(extent) + (uintptr_t)(i <<
+		    LG_PAGE));
+	}
+}
+
+
+
+
 static char *je_stack_begin = NULL;
 #define MAX_LARGE_PTRS 102400
-static void *large_ptrs[MAX_LARGE_PTRS];
-static int num_large_ptrs = 0;
+//static void *large_ptrs[MAX_LARGE_PTRS];
+//static int num_large_ptrs = 0;
 
 #define INTERIOR_STR 0xcabeULL
 #define UNMASK(x) ((char*)((((uint64_t)(x)) & 0xffffffffffffULL)))
 #define _MASK(x) ((char*)((((uint64_t)(x)) | (INTERIOR_STR << 48))))
 
+#if 0
 static void failed_large(void *ptr) {
 	int i;
 	malloc_printf("failing large : %d ptr:%p\n", num_large_ptrs, ptr);
@@ -60,14 +99,27 @@ static void failed_large(void *ptr) {
 		}
 	}
 }
+#endif
 
 static void add_large_pointer(void *ptr) {
+	tsd_t *tsd = tsd_fetch_min();
+	tsdn_t *tsdn = tsd_tsdn(tsd);
+	assert(tsdn);
+	extent_t *e = iealloc(tsdn, ptr);
+	rtree_ctx_t rtree_ctx_fallback;
+  rtree_ctx_t *rtree_ctx = tsdn_rtree_ctx(tsdn, &rtree_ctx_fallback);
+	szind_t szind = extent_szind_get_maybe_invalid(e);
+	extent_interior_register1(tsdn, rtree_ctx, e, szind);
+
+#if 0
 	assert(num_large_ptrs < MAX_LARGE_PTRS);
 	large_ptrs[num_large_ptrs] = ptr;
 	num_large_ptrs++;
-	malloc_printf("adding large ptr: %p num_large_ptrs:%d\n", ptr, num_large_ptrs);
+#endif
+	//malloc_printf("adding large ptr: %p num_large_ptrs:%d\n", ptr, num_large_ptrs);
 }
 
+#if 0
 static void *search_large_pointer(void *ptr) {
 	int i;
 	//malloc_printf("searching large : %d\n", num_large_ptrs);
@@ -85,10 +137,22 @@ static void *search_large_pointer(void *ptr) {
 	}
 	return NULL;
 }
+#endif
 
 static void remove_large_pointer(void *ptr) {
-	int i;
-	malloc_printf("removing large : %p\n", ptr);
+	//int i;
+	//malloc_printf("removing large : %p\n", ptr);
+
+	tsd_t *tsd = tsd_fetch_min();
+	tsdn_t *tsdn = tsd_tsdn(tsd);
+	assert(tsdn);
+	extent_t *e = iealloc(tsdn, ptr);
+	rtree_ctx_t rtree_ctx_fallback;
+  rtree_ctx_t *rtree_ctx = tsdn_rtree_ctx(tsdn, &rtree_ctx_fallback);
+	extent_interior_deregister1(tsdn, rtree_ctx, e);
+
+#if 0
+
 	for (i = 0; i < num_large_ptrs; i++) {
 		if (large_ptrs[i]) {
 			unsigned *sizeptr = ((unsigned*)large_ptrs[i]) + 1;
@@ -102,6 +166,7 @@ static void remove_large_pointer(void *ptr) {
 			}
 		}
 	}
+#endif
 }
 
 #define MAGIC_NUMBER 0xdeadface
@@ -133,6 +198,11 @@ static void *get_obj_header(void *ptr) {
 	if (header->size  > SC_SMALL_MAXCLASS - OBJ_HEADER_SIZE) {
 		//assert(search_large_pointer(ptr));
 		//assert(search_large_pointer(ptr+header->size-1));
+		//size_t size = header->size + OBJ_HEADER_SIZE;
+		//char *eptr = (char*)header + (rand() % size);
+		//void *base = _je_san_get_base(eptr);
+		//assert(base == (void*)header);
+
 		remove_large_pointer(header);
 	}
 	return header;
@@ -2593,7 +2663,10 @@ static void *get_global_header(unsigned *ptr) {
 }
 
 static bool is_stack_ptr(char *ptr) {
-	assert(je_stack_begin != NULL);
+	if (!je_stack_begin) {
+		return false;
+	}
+	//assert(je_stack_begin != NULL);
 	char stack_var;
 	char *lower = &stack_var;
 	char *higher = je_stack_begin;
@@ -2619,13 +2692,13 @@ static void *_je_san_get_base(void *ptr) {
 	assert(tsdn);
 	char *ptr_page = (char*)ptr;
 	extent_t *e = iealloc(tsdn, ptr_page);
-	if (e == NULL) {
+	/*if (e == NULL) {
 		ptr_page = search_large_pointer(ptr);
 		assert(ptr_page);
 		e = iealloc(tsdn, ptr_page);
-	}
+	}*/
 	if (!e) {
-		failed_large(ptr);
+		//failed_large(ptr);
 		malloc_printf("unable to find the base of : %p base:%p\n", ptr, ptr_page);
 	}
 	assert(e);
@@ -3022,11 +3095,13 @@ void je__obstack_newchunk(struct obstack *h, int length) {
 struct obstack *_obstacks[1024];
 static int num_obstack = 0;
 
+#if 0
 static void register_obstack(struct obstack *h) {
 	assert(num_obstack < 1024);
 	_obstacks[num_obstack] = h;
 	num_obstack++;
 }
+#endif
 
 static void print_all_obstack() {
 	int i;
@@ -3056,7 +3131,7 @@ int je__obstack_begin (struct obstack *h, int size, int alignment,
 	h->chunk_limit = _MASK(h->chunk_limit);
 	h->chunk->limit = _MASK(h->chunk->limit);
 
-	register_obstack(h);
+	//register_obstack(h);
 
 	malloc_printf("begin: free:%p base:%p lim:%p\n", h->next_free, h->object_base, h->chunk_limit);
 

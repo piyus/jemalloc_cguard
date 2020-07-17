@@ -727,6 +727,8 @@ extent_rtree_write_acquired(tsdn_t *tsdn, rtree_leaf_elm_t *elm_a,
 	}
 }
 
+
+
 static void
 extent_interior_register(tsdn_t *tsdn, rtree_ctx_t *rtree_ctx, extent_t *extent,
     szind_t szind) {
@@ -826,6 +828,7 @@ extent_reregister(tsdn_t *tsdn, extent_t *extent) {
 	bool err = extent_register(tsdn, extent);
 	assert(!err);
 }
+
 
 /*
  * Removes all pointers to the given extent from the global rtree indices for
