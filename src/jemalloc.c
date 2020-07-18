@@ -2872,7 +2872,7 @@ void* je_san_page_fault_len(void *ptr, int line, char *name) {
 	unsigned magic = *(optr-1);
 	unsigned *head;
 	//malloc_printf("magic:%x size:%x\n", magic, optr[0]);
-	if (magic != 0xdeadface) {
+	if (magic != 0xdeadface || ptr != optr) {
 		head = _je_san_get_base(optr);
 		assert(head[0] == 0xdeadface);
 		if (ptr > (void*)0x80000000 && !is_stack_ptr(ptr)) {
@@ -3273,11 +3273,17 @@ void je_san_abort2(void *base, void *cur, void *limit, void *ptrlimit, void *siz
 			return;
 		}
 	}
+
 	void *_base = (void*)UNMASK(base);
+	unsigned *head = _je_san_get_base(_base);
+
 	unsigned len = *((unsigned*)_base - 1);
 	unsigned magic = *((unsigned*)_base -2);
 	char *end = (char*)_base + len;
-	malloc_printf("base:%p cur:%p len:%d magic:%x end:%p limit:%p ptrlimit:%p size:%p callsite:%p\n", base, cur, len, magic, end, limit, ptrlimit, size, callsite);
+	malloc_printf("base:%p cur:%p len:%d magic:%x end:%p\n"
+								"limit:%p ptrlimit:%p size:%p callsite:%p\n",
+								base, cur, len, magic, end, limit, ptrlimit, size, callsite);
+	malloc_printf("head:%p head0:%x head1:%x\n", head, head[0], head[1]);
 	myfunc3();
 	abort();
 }
