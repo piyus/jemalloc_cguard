@@ -2875,11 +2875,11 @@ void* je_san_page_fault_len(void *ptr, int line, char *name) {
 	if (magic != 0xdeadface) {
 		head = _je_san_get_base(optr);
 		assert(head[0] == 0xdeadface);
-		if (ptr == optr) {
-			malloc_printf("ptr:%p head:%p\n", optr, head);
-			print_all_obstack();
-		}
 		if (ptr > (void*)0x80000000 && !is_stack_ptr(ptr)) {
+			if (ptr == optr) {
+				print_all_obstack();
+				malloc_printf("ptr:%p head:%p\n", optr, head);
+			}
 			assert(ptr != (void*)optr);
 		}
 		optr = head + 1;
