@@ -83,8 +83,14 @@ static char *je_stack_begin = NULL;
 //static int num_large_ptrs = 0;
 
 #define INTERIOR_STR 0xcabaULL
+#define TRACK_STR 0xcaba76ULL
+#define TRACK_SHIFT 40
 #define UNMASK(x) ((char*)((((uint64_t)(x)) & 0xffffffffffffULL)))
 #define _MASK(x) ((char*)((((uint64_t)(x)) | (INTERIOR_STR << 48))))
+
+static bool need_tracking(unsigned long long val) {
+	return (val >> TRACK_SHIFT) == TRACK_STR;
+}
 
 #if 0
 static void failed_large(void *ptr) {
@@ -2740,6 +2746,20 @@ char* je_san_make_interior(char *ptr) {
 	return ptr;
 }
 
+
+JEMALLOC_EXPORT
+void je_san_memcpy(unsigned long long *src, unsigned size, int line, char *name) {
+	event_id++;
+	unsigned i;
+	size = size / 8;
+	for (i = 0; i < size; i++) {
+		if (need_tracking(src[i])) {
+			malloc_printf("%lld %lld memcpy: src:%p sz:%x %s():%d %d %d\n", 
+				event_id, min_events, src, size, name, (line & 0xffff), (line>>16), line);
+		}
+	}
+}
+
 JEMALLOC_EXPORT
 void je_san_icmp(unsigned long long val1, unsigned long long val2, int line, char *name) {
 	event_id++;
@@ -2758,7 +2778,7 @@ void* je_san_page_fault_load(void *ptr, int line, char *name) {
 	event_id++;
 	//malloc_printf("1. store: ptr:%p val:%p\n", ptr, val);
 	void *optr = (void*)UNMASK(ptr);
-	if (event_id > min_events) {
+	if (event_id > min_events || need_tracking(*((unsigned long long*)optr))) {
 		malloc_printf("%lld load: ptr:%p val:%p %s():%d %d %d\n", 
 			event_id, ptr, *((char**)optr), name, (line & 0xffff), (line>>16), line);
 	}
@@ -2783,7 +2803,7 @@ JEMALLOC_EXPORT
 void* je_san_page_fault_store(void *ptr, void *val, int line, char *name) {
 	event_id++;
 	void *optr = (void*)UNMASK(ptr);
-	if (event_id > min_events) {
+	if (event_id > min_events || need_tracking((unsigned long long)val)) {
 		printf("%lld store: ptr:%p val:%p %d %d %d\n", event_id, ptr, val, (line & 0xffff), (line>>16), line);
 	}
 #if 0
