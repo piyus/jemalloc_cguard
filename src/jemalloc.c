@@ -82,6 +82,7 @@ static char *je_stack_begin = NULL;
 //static void *large_ptrs[MAX_LARGE_PTRS];
 //static int num_large_ptrs = 0;
 
+#define INTERIOR_STR1 0xcaba7fULL
 #define INTERIOR_STR 0xcabaULL
 #define TRACK_STR 0xcaba76ULL
 #define TRACK_SHIFT 40
@@ -191,7 +192,9 @@ static void *make_obj_header(void *ptr, size_t size) {
 		add_large_pointer(ptr);
 	}
 
-	malloc_printf("mal ptr:%p sz:%zd\n", ptr, size);
+	if (event_id > min_events) {
+		malloc_printf("mal ptr:%p sz:%zd\n", ptr, size);
+	}
 	struct obj_header *header = (struct obj_header*)ptr;
 	header->magic = MAGIC_NUMBER;
 	header->size = (unsigned)size;
@@ -2766,7 +2769,7 @@ void je_san_icmp(unsigned long long val1, unsigned long long val2, int line, cha
 	if (val1 == (unsigned long long)-1 || val2 == (unsigned long long)-1) {
 		return;
 	}
-	if ((val1 >> 48) == INTERIOR_STR || (val2 >> 48) == INTERIOR_STR) {
+	if ((val1 >> 40) == INTERIOR_STR1 || (val2 >> 40) == INTERIOR_STR1) {
 		malloc_printf("%lld %lld icmp: val1:%llx val2:%llx %s():%d %d %d\n", 
 			event_id, min_events, val1, val2, name, (line & 0xffff), (line>>16), line);
 		assert(0);
@@ -2804,7 +2807,7 @@ void* je_san_page_fault_store(void *ptr, void *val, int line, char *name) {
 	event_id++;
 	void *optr = (void*)UNMASK(ptr);
 	if (event_id > min_events || need_tracking((unsigned long long)val)) {
-		printf("%lld store: ptr:%p val:%p %d %d %d\n", event_id, ptr, val, (line & 0xffff), (line>>16), line);
+		printf("%lld store: ptr:%p val:%p %s(): %d %d %d\n", event_id, ptr, val, name, (line & 0xffff), (line>>16), line);
 	}
 #if 0
 	void *oval = (void*)(((unsigned long long)val) & 0x7fffffffffffffffULL);
@@ -3049,7 +3052,6 @@ int je__obstack_memory_used (struct obstack *h)
 
 JEMALLOC_EXPORT
 void je__obstack_newchunk(struct obstack *h, int length) {
-	malloc_printf("newchunk\n");
   struct _obstack_chunk *old_chunk = (struct _obstack_chunk*)UNMASK(h->chunk);
 	h->chunk = old_chunk;
 	old_chunk->limit = UNMASK(old_chunk->limit);
@@ -3161,7 +3163,6 @@ JEMALLOC_EXPORT
 int je__obstack_begin (struct obstack *h, int size, int alignment,
          void *(*chunkfun)(long), void (*freefun)(void *)) {
 
-	malloc_printf("begin\n");
 	h->next_free = UNMASK(h->next_free);
 	h->object_base = UNMASK(h->object_base);
 	h->chunk_limit = UNMASK(h->chunk_limit);
@@ -3179,7 +3180,7 @@ int je__obstack_begin (struct obstack *h, int size, int alignment,
 
 	//register_obstack(h);
 
-	malloc_printf("begin: free:%p base:%p lim:%p\n", h->next_free, h->object_base, h->chunk_limit);
+	//malloc_printf("begin: free:%p base:%p lim:%p\n", h->next_free, h->object_base, h->chunk_limit);
 
 	return ret;
 
@@ -3272,9 +3273,10 @@ void je_san_abort2(void *base, void *cur, void *limit, void *ptrlimit, void *siz
 			return;
 		}
 	}
-	unsigned len = *((unsigned*)base - 1);
-	unsigned magic = *((unsigned*)base -2);
-	char *end = (char*)base + len;
+	void *_base = (void*)UNMASK(base);
+	unsigned len = *((unsigned*)_base - 1);
+	unsigned magic = *((unsigned*)_base -2);
+	char *end = (char*)_base + len;
 	malloc_printf("base:%p cur:%p len:%d magic:%x end:%p limit:%p ptrlimit:%p size:%p callsite:%p\n", base, cur, len, magic, end, limit, ptrlimit, size, callsite);
 	myfunc3();
 	abort();
