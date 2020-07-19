@@ -2606,7 +2606,7 @@ _je_malloc(size_t size) {
 	return malloc_default(size);
 }
 
-#define MAX_STACK_PTRS 10240
+#define MAX_STACK_PTRS 102400
 static void *stack_ptrs[MAX_STACK_PTRS];
 static int num_stack_ptrs = 0;
 
