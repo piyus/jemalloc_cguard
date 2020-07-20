@@ -23,8 +23,8 @@
 
 #undef obstack_free
 
-static unsigned long long event_id = 0;
-static unsigned long long min_events = 0xffff4800000000ULL;
+static unsigned long long event_id = 1;
+static unsigned long long min_events = 0; // 0xffff4800000000ULL;
 
 struct obj_header {
 	unsigned magic;
@@ -2807,7 +2807,12 @@ void* je_san_page_fault_store(void *ptr, void *val, int line, char *name) {
 	event_id++;
 	void *optr = (void*)UNMASK(ptr);
 	if (event_id > min_events || need_tracking((unsigned long long)val)) {
-		printf("%lld store: ptr:%p val:%p %s(): %d %d %d\n", event_id, ptr, val, name, (line & 0xffff), (line>>16), line);
+		if (name && name < (char*)0xFFFFFFFFFFFFULL) {
+			printf("%lld store: ptr:%p val:%p %s(): %d %d %d\n", event_id, ptr, val, name, (line & 0xffff), (line>>16), line);
+		}
+		else {
+			printf("%lld store: ptr:%p val:%p _bug(): %d %d %d\n", event_id, ptr, val, (line & 0xffff), (line>>16), line);
+		}
 	}
 #if 0
 	void *oval = (void*)(((unsigned long long)val) & 0x7fffffffffffffffULL);
@@ -2874,6 +2879,9 @@ void* je_san_page_fault_len(void *ptr, int line, char *name) {
 	//malloc_printf("magic:%x size:%x\n", magic, optr[0]);
 	if (magic != 0xdeadface || ptr != optr) {
 		head = _je_san_get_base(optr);
+		if (head[0] != 0xdeadface) {
+			malloc_printf("optr:%p head:%p\n", optr, head);
+		}
 		assert(head[0] == 0xdeadface);
 		if (ptr > (void*)0x80000000 && !is_stack_ptr(ptr)) {
 			if (ptr == optr) {
@@ -3294,7 +3302,7 @@ void* je_san_copy_argv(int argc, char **argv) {
 	je_stack_begin = (char*)&argc;
 	assert(argc >= 1);
 	int i;
-	int argv_size = argc * sizeof(char*);
+	int argv_size = (argc + 1) * sizeof(char*);
 	char **new_argv = (char**)je_malloc(argv_size);
 	assert(new_argv);
 	for (i = 0; i < argc; i++) {
@@ -3306,6 +3314,7 @@ void* je_san_copy_argv(int argc, char **argv) {
 		new_arg[len] = '\0';
 		new_argv[i] = new_arg;
 	}
+	new_argv[i] = NULL;
 	return (void*)new_argv;
 }
 
