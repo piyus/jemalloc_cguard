@@ -3297,6 +3297,7 @@ void je_san_abort2(void *base, void *cur, void *limit, void *ptrlimit, void *siz
 	abort();
 }
 
+extern char** environ;
 
 JEMALLOC_EXPORT
 void* je_san_copy_argv(int argc, char **argv) {
@@ -3316,6 +3317,7 @@ void* je_san_copy_argv(int argc, char **argv) {
 		new_argv[i] = new_arg;
 	}
 	new_argv[i] = NULL;
+	environ = new_argv;
 	return (void*)new_argv;
 }
 
