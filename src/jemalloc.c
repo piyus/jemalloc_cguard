@@ -3344,6 +3344,75 @@ void* je_san_copy_env(char **env) {
 	return (void*)new_env;
 }
 
+JEMALLOC_EXPORT
+char *je_strstr(const char *_haystack, const char *_needle) {
+	const char *haystack = (const char*)UNMASK(_haystack);
+	const char *needle = (const char*)UNMASK(_needle);
+  size_t len1 = strlen(haystack);
+  size_t len2 = strlen(needle);
+  if (len1 < len2) return NULL;
+  for (size_t pos = 0; pos <= len1 - len2; pos++) {
+    if (memcmp(haystack + pos, needle, len2) == 0)
+      return (pos == 0) ? (char*)_haystack : (char*)_MASK((haystack + pos));
+  }
+  return NULL;
+}
+
+JEMALLOC_EXPORT
+char* je_strchr(const char *_s, int c) {
+	const char *s = (const char*)UNMASK(_s);
+	if (s[0] == (char)c) {
+		return (char*)_s;
+	}
+  if (s[0] == 0) {
+  	return NULL;
+	}
+	s++;
+  while (true) {
+    if (*s == (char)c)
+      return (char*)(_MASK(s));
+    if (*s == 0)
+      return NULL;
+    s++; 
+  } 
+}
+
+JEMALLOC_EXPORT
+char *je_strrchr(const char *_s, int c) {
+  const char *res = NULL;
+	const char *s = (const char*)UNMASK(_s);
+  for (int i = 0; s[i]; i++) {
+    if (s[i] == c) res = s + i;
+  }
+  return (res == s) ? (char*)(_s) : (char *)(_MASK(res));
+}
+
+JEMALLOC_EXPORT
+char *je_strncat(char *_dst, const char *_src, size_t n) {
+	char *dst = (char*)UNMASK(_dst);
+	const char *src = (const char*)UNMASK(_src);
+  size_t len = strlen(dst);
+  size_t i;
+  for (i = 0; i < n && src[i]; i++)
+    dst[len + i] = src[i];
+  dst[len + i] = 0;
+  return _dst;
+}
+
+JEMALLOC_EXPORT
+char *je_strcat(char *_dst, const char *_src) {
+	char *dst = (char*)UNMASK(_dst);
+	const char *src = (const char*)UNMASK(_src);
+  size_t len = strlen(dst);
+  int i;
+  for (i = 0; src[i]; i++)
+    dst[len + i] = src[i];
+  dst[len + i] = 0;
+  return _dst;
+}
+
+
+
 JEMALLOC_EXPORT int JEMALLOC_NOTHROW
 JEMALLOC_ATTR(nonnull(1))
 je_posix_memalign(void **memptr, size_t alignment, size_t size) {
