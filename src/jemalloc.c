@@ -2682,6 +2682,7 @@ static bool is_stack_ptr(char *ptr) {
 	char stack_var;
 	char *lower = &stack_var;
 	char *higher = je_stack_begin;
+	malloc_printf("lower:%p higher:%p ptr:%p\n", lower, higher, ptr);
 	return ptr >= lower && ptr <= higher;
 }
 
@@ -3316,6 +3317,29 @@ void* je_san_copy_argv(int argc, char **argv) {
 	}
 	new_argv[i] = NULL;
 	return (void*)new_argv;
+}
+
+JEMALLOC_EXPORT
+void* je_san_copy_env(char **env) {
+	int num_env = 0, i;
+	while (env[num_env] != NULL) {
+		num_env++;
+	}
+
+	int env_size = (num_env + 1) * sizeof(char*);
+	char **new_env = (char**)je_malloc(env_size);
+	assert(new_env);
+	for (i = 0; i < num_env; i++) {
+		char *e = env[i];
+		int len = strlen(e);
+		char *new_e = (char*)je_malloc(len+1);
+		assert(new_e);
+		memcpy(new_e, e, len);
+		new_e[len] = '\0';
+		new_env[i] = new_e;
+	}
+	new_env[i] = NULL;
+	return (void*)new_env;
 }
 
 JEMALLOC_EXPORT int JEMALLOC_NOTHROW
