@@ -3014,6 +3014,39 @@ int je_vasprintf(char **strp, const char *fmt, va_list ap)
 }
 
 JEMALLOC_EXPORT
+int je_vfprintf(FILE *stream, const char *fmt, va_list ap)
+{
+	unsigned long long *reg_save_area, *mem_save_area;
+	unsigned long long mask;
+	int i;
+	reg_save_area = *(unsigned long long**)((unsigned long long)ap+16);
+  mem_save_area = *(unsigned long long**)((unsigned long long)ap+8);
+  if (mem_save_area) {
+    for (i = 0; i < 8; i++) {
+			mask = (mem_save_area[i] >> 48);
+			if (mask == INTERIOR_STR) {
+				mem_save_area[i] = (unsigned long long)UNMASK(mem_save_area[i]);
+			}
+    }
+  }
+  if (reg_save_area) {
+    for (i = 0; i < 8; i++) {
+			mask = (reg_save_area[i] >> 48);
+			if (mask == INTERIOR_STR) {
+				reg_save_area[i] = (unsigned long long)UNMASK(reg_save_area[i]);
+			}
+    }
+  }
+
+
+	static int (*fptr)(FILE*, const char*, va_list) = NULL;
+	if (fptr == NULL) {
+		fptr = get_func_addr("vfprintf", je_vfprintf);
+	}
+	return fptr(stream, fmt, ap);
+}
+
+JEMALLOC_EXPORT
 void je_obstack_free(struct obstack *h, void *_obj) {
 	char *obj = (char*)_obj;
   register struct _obstack_chunk *lp;	/* below addr of any objects in this chunk */
