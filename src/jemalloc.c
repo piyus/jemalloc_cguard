@@ -21,6 +21,7 @@
 #include "jemalloc/internal/util.h"
 #include <obstack.h>
 
+#define INTERIOR_STR 0xcabaULL
 
 #include "qsort.c"
 
@@ -86,7 +87,6 @@ static char *je_stack_begin = NULL;
 //static int num_large_ptrs = 0;
 
 #define INTERIOR_STR1 0xcaba7fULL
-#define INTERIOR_STR 0xcabaULL
 #define TRACK_STR 0 //0xcaba76ULL
 #define TRACK_SHIFT 40
 #define UNMASK(x) ((char*)((((uint64_t)(x)) & 0xffffffffffffULL)))

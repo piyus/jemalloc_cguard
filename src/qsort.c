@@ -88,12 +88,14 @@ typedef struct
       smaller partition.  This *guarantees* no more than log (total_elems)
       stack size is needed (actually O(1) in this case)!  */
 
+#define __MASK(x) ((char*)((((uint64_t)(x)) | (INTERIOR_STR << 48))))
+
 JEMALLOC_EXPORT
 void
 je_qsort (void *const pbase, size_t total_elems, size_t size,
             __compar_fn_t cmp)
 {
-  register char *base_ptr = (char *) pbase;
+  register char *base_ptr = (char *) __MASK(pbase);
 
   const size_t max_thresh = MAX_THRESH * size;
 
@@ -238,12 +240,14 @@ je_qsort (void *const pbase, size_t total_elems, size_t size,
             char *trav;
 
             trav = run_ptr + size;
+						char *_tmp_ptr = _UNMASK(tmp_ptr);
             while (--trav >= run_ptr)
               {
-                char c = *trav;
+								char *_trav = _UNMASK(trav);
+                char c = *_trav;
                 char *hi, *lo;
 
-                for (hi = lo = trav; (lo -= size) >= tmp_ptr; hi = lo)
+                for (hi = lo = _trav; (lo -= size) >= _tmp_ptr; hi = lo)
                   *hi = *lo;
                 *hi = c;
               }
