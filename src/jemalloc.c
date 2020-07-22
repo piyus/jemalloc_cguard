@@ -22,6 +22,8 @@
 #include <obstack.h>
 
 
+#include "qsort.c"
+
 #undef obstack_free
 
 static unsigned long long event_id = 1;
@@ -2812,7 +2814,7 @@ void* je_san_page_fault_store(void *ptr, void *val, int line, char *name) {
 	event_id++;
 	void *optr = (void*)UNMASK(ptr);
 	if (event_id > min_events || need_tracking((unsigned long long)val)) {
-		if (name && name < (char*)0xFFFFFFFFFFFFULL) {
+		if (0 && name && name < (char*)0xFFFFFFFFFFFFULL) {
 			printf("%lld store: ptr:%p val:%p %s(): %d %d %d\n", event_id, ptr, val, name, (line & 0xffff), (line>>16), line);
 		}
 		else {
@@ -2891,7 +2893,7 @@ void* je_san_page_fault_len(void *ptr, int line, char *name) {
 		if (ptr > (void*)0x80000000 && !is_stack_ptr(ptr)) {
 			if (ptr == optr) {
 				print_all_obstack();
-				malloc_printf("ptr:%p head:%p\n", optr, head);
+				malloc_printf("%lld ptr:%p head:%p\n", event_id, optr, head);
 			}
 			assert(ptr != (void*)optr);
 		}
