@@ -24,7 +24,7 @@
 #undef obstack_free
 
 static unsigned long long event_id = 1;
-static unsigned long long min_events = 0; // 0xffff4800000000ULL;
+static unsigned long long min_events = 0xffff4800000000ULL;
 
 struct obj_header {
 	unsigned magic;
@@ -84,12 +84,15 @@ static char *je_stack_begin = NULL;
 
 #define INTERIOR_STR1 0xcaba7fULL
 #define INTERIOR_STR 0xcabaULL
-#define TRACK_STR 0xcaba76ULL
+#define TRACK_STR 0 //0xcaba76ULL
 #define TRACK_SHIFT 40
 #define UNMASK(x) ((char*)((((uint64_t)(x)) & 0xffffffffffffULL)))
 #define _MASK(x) ((char*)((((uint64_t)(x)) | (INTERIOR_STR << 48))))
 
 static bool need_tracking(unsigned long long val) {
+	if (!TRACK_STR) {
+		return false;
+	}
 	return (val >> TRACK_SHIFT) == TRACK_STR;
 }
 
@@ -2682,7 +2685,7 @@ static bool is_stack_ptr(char *ptr) {
 	char stack_var;
 	char *lower = &stack_var;
 	char *higher = je_stack_begin;
-	malloc_printf("lower:%p higher:%p ptr:%p\n", lower, higher, ptr);
+	//malloc_printf("lower:%p higher:%p ptr:%p\n", lower, higher, ptr);
 	return ptr >= lower && ptr <= higher;
 }
 
