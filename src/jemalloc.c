@@ -28,7 +28,7 @@
 #undef obstack_free
 
 static unsigned long long event_id = 1;
-static unsigned long long min_events = 0xffff4800000000ULL;
+static unsigned long long min_events = 0; //0xffff4800000000ULL;
 
 struct obj_header {
 	unsigned magic;
@@ -2839,6 +2839,16 @@ void* je_san_page_fault_store(void *ptr, void *val, int line, char *name) {
 }
 
 JEMALLOC_EXPORT
+void je_san_page_fault_ret(void *ptr, int line, char *name) {
+	event_id++;
+	if (event_id > min_events) {
+		malloc_printf("%lld ret: ptr:%p %s():%d %d %d\n", event_id, ptr, name, (line & 0xffff), (line>>16), line);
+	}
+	//void *base = NULL; //je_san_get_base(optr);
+	//printf("base:%p optr:%p ptr:%p\n", base, optr, ptr);
+}
+
+JEMALLOC_EXPORT
 void je_san_page_fault_arg(void *ptr, int line, char *name) {
 	event_id++;
 	if (event_id > min_events) {
@@ -2893,7 +2903,7 @@ void* je_san_page_fault_len(void *ptr, int line, char *name) {
 		if (ptr > (void*)0x80000000 && !is_stack_ptr(ptr)) {
 			if (ptr == optr) {
 				print_all_obstack();
-				malloc_printf("%lld ptr:%p head:%p\n", event_id, optr, head);
+				malloc_printf("%lld ptr:%p head:%p line:%d\n", event_id, optr, head, line);
 			}
 			assert(ptr != (void*)optr);
 		}
