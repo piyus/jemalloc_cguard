@@ -2756,6 +2756,7 @@ char* je_san_make_interior(char *ptr) {
 	return ptr;
 }
 
+static char *null_name = "null_name";
 
 JEMALLOC_EXPORT
 void je_san_memcpy(unsigned long long *src, unsigned size, int line, char *name) {
@@ -2764,6 +2765,7 @@ void je_san_memcpy(unsigned long long *src, unsigned size, int line, char *name)
 	size = size / 8;
 	for (i = 0; i < size; i++) {
 		if (need_tracking(src[i])) {
+			name = (name < (char*)0x1000) ? null_name : name;
 			malloc_printf("%lld %lld memcpy: src:%p sz:%x %s():%d %d %d\n", 
 				event_id, min_events, src, size, name, (line & 0xffff), (line>>16), line);
 		}
@@ -2777,6 +2779,7 @@ void je_san_icmp(unsigned long long val1, unsigned long long val2, int line, cha
 		return;
 	}
 	if ((val1 >> 40) == INTERIOR_STR1 || (val2 >> 40) == INTERIOR_STR1) {
+		name = (name < (char*)0x1000) ? null_name : name;
 		malloc_printf("%lld %lld icmp: val1:%llx val2:%llx %s():%d %d %d\n", 
 			event_id, min_events, val1, val2, name, (line & 0xffff), (line>>16), line);
 		assert(0);
@@ -2789,6 +2792,7 @@ void* je_san_page_fault_load(void *ptr, int line, char *name) {
 	//malloc_printf("1. store: ptr:%p val:%p\n", ptr, val);
 	void *optr = (void*)UNMASK(ptr);
 	if (event_id > min_events || need_tracking(*((unsigned long long*)optr))) {
+		name = (name < (char*)0x1000) ? null_name : name;
 		malloc_printf("%lld load: ptr:%p val:%p %s():%d %d %d\n", 
 			event_id, ptr, *((char**)optr), name, (line & 0xffff), (line>>16), line);
 	}
@@ -2814,12 +2818,8 @@ void* je_san_page_fault_store(void *ptr, void *val, int line, char *name) {
 	event_id++;
 	void *optr = (void*)UNMASK(ptr);
 	if (event_id > min_events || need_tracking((unsigned long long)val)) {
-		if (0 && name && name < (char*)0xFFFFFFFFFFFFULL) {
-			printf("%lld store: ptr:%p val:%p %s(): %d %d %d\n", event_id, ptr, val, name, (line & 0xffff), (line>>16), line);
-		}
-		else {
-			printf("%lld store: ptr:%p val:%p _bug(): %d %d %d\n", event_id, ptr, val, (line & 0xffff), (line>>16), line);
-		}
+		name = (name < (char*)0x1000) ? null_name : name;
+		printf("%lld store: ptr:%p val:%p %s(): %d %d %d\n", event_id, ptr, val, name, (line & 0xffff), (line>>16), line);
 	}
 #if 0
 	void *oval = (void*)(((unsigned long long)val) & 0x7fffffffffffffffULL);
@@ -2842,6 +2842,7 @@ JEMALLOC_EXPORT
 void je_san_call(void *ptr1, void *ptr2, int line, char *name) {
 	event_id++;
 	if (event_id > min_events) {
+		name = (name < (char*)0x1000) ? null_name : name;
 		malloc_printf("%lld call: ptr1:%p ptr2:%p %s():%d %d %d\n", event_id, ptr1, ptr2, name, (line & 0xffff), (line>>16), line);
 	}
 }
@@ -2850,6 +2851,7 @@ JEMALLOC_EXPORT
 void je_san_page_fault_ret(void *ptr, int line, char *name) {
 	event_id++;
 	if (event_id > min_events) {
+		name = (name < (char*)0x1000) ? null_name : name;
 		printf("%lld ret: ptr:%p %s():%d %d %d\n", event_id, ptr, name, (line & 0xffff), (line>>16), line);
 	}
 	//void *base = NULL; //je_san_get_base(optr);
@@ -2860,6 +2862,7 @@ JEMALLOC_EXPORT
 void je_san_page_fault_arg(void *ptr, int line, char *name) {
 	event_id++;
 	if (event_id > min_events) {
+		name = (name < (char*)0x1000) ? null_name : name;
 		malloc_printf("%lld arg: ptr:%p %s():%d %d %d\n", event_id, ptr, name, (line & 0xffff), (line>>16), line);
 	}
 	//void *base = NULL; //je_san_get_base(optr);
@@ -2871,6 +2874,7 @@ void* je_san_page_fault(void *ptr, int line, char *name) {
 	event_id++;
 	void *optr = (void*)UNMASK(ptr);
 	if (event_id > min_events) {
+		name = (name < (char*)0x1000) ? null_name : name;
 		malloc_printf("%lld ld/st: ptr:%p %s():%d %d %d\n", event_id, ptr, name, (line & 0xffff), (line>>16), line);
 	}
 	//void *base = NULL; //je_san_get_base(optr);
@@ -2883,6 +2887,7 @@ void* je_san_page_fault_call(void *ptr, int line, char *name) {
 	event_id++;
 	void *optr = (void*)UNMASK(ptr);
 	if (event_id > min_events) {
+		name = (name < (char*)0x1000) ? null_name : name;
 		malloc_printf("%lld call: ptr:%p %s():%d %d %d\n", event_id, ptr, name, (line & 0xffff), (line>>16), line);
 	}
 	//void *base = NULL; //je_san_get_base(optr);
@@ -2897,6 +2902,7 @@ void* je_san_page_fault_len(void *ptr, int line, char *name) {
 	event_id++;
 	unsigned *optr = (unsigned*)UNMASK(ptr);
 	if (event_id > min_events) {
+		name = (name < (char*)0x1000) ? null_name : name;
 		malloc_printf("%lld len: ptr:%p %s():%d %d %d\n", event_id, ptr, name, (line & 0xffff), (line>>16), line);
 	}
 	unsigned magic = *(optr-1);
