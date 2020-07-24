@@ -2671,7 +2671,7 @@ struct obj_header fake_header = {MAGIC_NUMBER, 0xfffffff};
 
 static void *get_global_header(unsigned *ptr) {
 	int iter = 0;
-	while (ptr[0] != MAGIC_NUMBER && iter++ < 10000) {
+	while (ptr[0] != MAGIC_NUMBER && iter++ < 1000) {
 		ptr--;
 	}
 	if (ptr[0] != MAGIC_NUMBER) {
@@ -3038,6 +3038,86 @@ static int fix_varg_interiors(va_list ap, unsigned long long **fixes, unsigned l
     }
   }
 	return num_fixes;
+}
+
+#include "wordcopy.c"
+
+JEMALLOC_EXPORT
+void *
+je_memcpy (void *dstpp, const void *srcpp, size_t len)
+{
+  unsigned long int dstp = (long int) UNMASK(dstpp);
+  unsigned long int srcp = (long int) UNMASK(srcpp);
+
+  /* Copy from the beginning to the end.  */
+
+  /* If there not too few bytes to copy, use word copy.  */
+  if (len >= OP_T_THRES)
+    {
+      /* Copy just a few bytes to make DSTP aligned.  */
+      len -= (-dstp) % OPSIZ;
+      BYTE_COPY_FWD (dstp, srcp, (-dstp) % OPSIZ);
+
+      /* Copy whole pages from SRCP to DSTP by virtual address manipulation,
+	 as much as possible.  */
+
+      PAGE_COPY_FWD_MAYBE (dstp, srcp, len, len);
+
+      /* Copy from SRCP to DSTP taking advantage of the known alignment of
+	 DSTP.  Number of bytes remaining is put in the third argument,
+	 i.e. in LEN.  This number may vary from machine to machine.  */
+
+      WORD_COPY_FWD (dstp, srcp, len, len);
+
+      /* Fall out and copy the tail.  */
+    }
+
+  /* There are just a few bytes to copy.  Use byte memory operations.  */
+  BYTE_COPY_FWD (dstp, srcp, len);
+
+  return dstpp;
+}
+
+#ifdef __GNUC__
+typedef __attribute__((__may_alias__)) size_t WT;
+#define WS (sizeof(WT))
+#endif
+
+JEMALLOC_EXPORT
+void *je_memmove(void *_dest, const void *_src, size_t n)
+{
+	void *dest = (void*)UNMASK(_dest);
+	void *src = (void*)UNMASK(_src);
+	char *d = dest;
+	const char *s = src;
+
+	if (d==s) return d;
+	if ((uintptr_t)s-(uintptr_t)d-n <= -2*n) return memcpy(d, s, n);
+
+	if (d<s) {
+#ifdef __GNUC__
+		if ((uintptr_t)s % WS == (uintptr_t)d % WS) {
+			while ((uintptr_t)d % WS) {
+				if (!n--) return _dest;
+				*d++ = *s++;
+			}
+			for (; n>=WS; n-=WS, d+=WS, s+=WS) *(WT *)d = *(WT *)s;
+		}
+#endif
+		for (; n; n--) *d++ = *s++;
+	} else {
+#ifdef __GNUC__
+		if ((uintptr_t)s % WS == (uintptr_t)d % WS) {
+			while ((uintptr_t)(d+n) % WS) {
+				if (!n--) return _dest;
+				d[n] = s[n];
+			}
+			while (n>=WS) n-=WS, *(WT *)(d+n) = *(WT *)(s+n);
+		}
+#endif
+		while (n) n--, d[n] = s[n];
+	}
+	return _dest;
 }
 
 static void restore_varg(unsigned long long **fixes, unsigned long long *vals, int num_fixes) {
