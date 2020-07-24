@@ -2839,10 +2839,18 @@ void* je_san_page_fault_store(void *ptr, void *val, int line, char *name) {
 }
 
 JEMALLOC_EXPORT
+void je_san_call(void *ptr1, void *ptr2, int line, char *name) {
+	event_id++;
+	if (event_id > min_events) {
+		malloc_printf("%lld call: ptr1:%p ptr2:%p %s():%d %d %d\n", event_id, ptr1, ptr2, name, (line & 0xffff), (line>>16), line);
+	}
+}
+
+JEMALLOC_EXPORT
 void je_san_page_fault_ret(void *ptr, int line, char *name) {
 	event_id++;
 	if (event_id > min_events) {
-		malloc_printf("%lld ret: ptr:%p %s():%d %d %d\n", event_id, ptr, name, (line & 0xffff), (line>>16), line);
+		printf("%lld ret: ptr:%p %s():%d %d %d\n", event_id, ptr, name, (line & 0xffff), (line>>16), line);
 	}
 	//void *base = NULL; //je_san_get_base(optr);
 	//printf("base:%p optr:%p ptr:%p\n", base, optr, ptr);
