@@ -28,7 +28,7 @@
 #undef obstack_free
 
 static unsigned long long event_id = 1;
-static unsigned long long min_events = 0; //0xffff4800000000ULL;
+static unsigned long long min_events = 0xffff4800000000ULL;
 
 struct obj_header {
 	unsigned magic;
@@ -3004,18 +3004,24 @@ ssize_t je___getdelim(char **_lineptr, size_t *_n, int delim, FILE *_stream)
 	return fptr(lineptr, n, delim, stream);
 }
 
-JEMALLOC_EXPORT
-int je_vasprintf(char **strp, const char *fmt, va_list ap)
-{
+#define MAX_INTERIOR 10
+
+
+static int fix_varg_interiors(va_list ap, unsigned long long **fixes, unsigned long long *vals) {
 	unsigned long long *reg_save_area, *mem_save_area;
 	unsigned long long mask;
+	int num_fixes = 0;
 	int i;
+
 	reg_save_area = *(unsigned long long**)((unsigned long long)ap+16);
   mem_save_area = *(unsigned long long**)((unsigned long long)ap+8);
   if (mem_save_area) {
     for (i = 0; i < 8; i++) {
 			mask = (mem_save_area[i] >> 48);
 			if (mask == INTERIOR_STR) {
+				assert(num_fixes < MAX_INTERIOR);
+				vals[num_fixes] = mem_save_area[i];
+				fixes[num_fixes++] = &mem_save_area[i];
 				mem_save_area[i] = (unsigned long long)UNMASK(mem_save_area[i]);
 			}
     }
@@ -3024,50 +3030,53 @@ int je_vasprintf(char **strp, const char *fmt, va_list ap)
     for (i = 0; i < 8; i++) {
 			mask = (reg_save_area[i] >> 48);
 			if (mask == INTERIOR_STR) {
+				assert(num_fixes < MAX_INTERIOR);
+				vals[num_fixes] = reg_save_area[i];
+				fixes[num_fixes++] = &reg_save_area[i];
 				reg_save_area[i] = (unsigned long long)UNMASK(reg_save_area[i]);
 			}
     }
   }
+	return num_fixes;
+}
 
+static void restore_varg(unsigned long long **fixes, unsigned long long *vals, int num_fixes) {
+	int i;
+	for (i = 0; i < num_fixes; i++) {
+		*(fixes[i]) = vals[i];
+	}
+}
+
+JEMALLOC_EXPORT
+int je_vasprintf(char **strp, const char *fmt, va_list ap)
+{
+	unsigned long long *fixes[MAX_INTERIOR];
+	unsigned long long vals[MAX_INTERIOR];
+	int num_fixes = fix_varg_interiors(ap, fixes, vals);
 
 	static int (*fptr)(char**, const char*, va_list) = NULL;
 	if (fptr == NULL) {
 		fptr = get_func_addr("vasprintf", je_vasprintf);
 	}
-	return fptr(strp, fmt, ap);
+  int ret = fptr(strp, fmt, ap);
+  restore_varg(fixes, vals, num_fixes);
+  return ret;
 }
 
 JEMALLOC_EXPORT
 int je_vfprintf(FILE *stream, const char *fmt, va_list ap)
 {
-	unsigned long long *reg_save_area, *mem_save_area;
-	unsigned long long mask;
-	int i;
-	reg_save_area = *(unsigned long long**)((unsigned long long)ap+16);
-  mem_save_area = *(unsigned long long**)((unsigned long long)ap+8);
-  if (mem_save_area) {
-    for (i = 0; i < 8; i++) {
-			mask = (mem_save_area[i] >> 48);
-			if (mask == INTERIOR_STR) {
-				mem_save_area[i] = (unsigned long long)UNMASK(mem_save_area[i]);
-			}
-    }
-  }
-  if (reg_save_area) {
-    for (i = 0; i < 8; i++) {
-			mask = (reg_save_area[i] >> 48);
-			if (mask == INTERIOR_STR) {
-				reg_save_area[i] = (unsigned long long)UNMASK(reg_save_area[i]);
-			}
-    }
-  }
-
-
+	unsigned long long *fixes[MAX_INTERIOR];
+	unsigned long long vals[MAX_INTERIOR];
+	int num_fixes = fix_varg_interiors(ap, fixes, vals);
 	static int (*fptr)(FILE*, const char*, va_list) = NULL;
+
 	if (fptr == NULL) {
 		fptr = get_func_addr("vfprintf", je_vfprintf);
 	}
-	return fptr(stream, fmt, ap);
+	int ret = fptr(stream, fmt, ap);
+	restore_varg(fixes, vals, num_fixes);
+	return ret;
 }
 
 JEMALLOC_EXPORT
