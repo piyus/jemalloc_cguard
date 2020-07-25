@@ -27,11 +27,16 @@
 
 #undef obstack_free
 
+#define ALIGN_PAD(y) ((size_t)(y)-1)
+#define ALIGN_MASK(y) (~ALIGN_PAD(y))
+#define JE_ALIGN(x, y) (char*)(((size_t)(x) + ALIGN_PAD(y)) & ALIGN_MASK(y))
+
 static unsigned long long event_id = 1;
 static unsigned long long min_events = 0xffff4800000000ULL;
 
 struct obj_header {
-	unsigned magic;
+	unsigned short magic;
+	unsigned short offset;
 	unsigned size;
 };
 
@@ -185,17 +190,19 @@ static void remove_large_pointer(void *ptr) {
 #endif
 }
 
-#define MAGIC_NUMBER 0xdeadface
+#define MAGIC_NUMBER 0xface
 
-static void *make_obj_header(void *ptr, size_t size) {
+#define IS_MAGIC(x) (((x) & 0xffff) == MAGIC_NUMBER)
+
+static void *make_obj_header(void *ptr, size_t size, unsigned short offset) {
 	if (ptr == NULL) {
 		return ptr;
 	}
 
-	if (size+OBJ_HEADER_SIZE > SC_SMALL_MAXCLASS) {
+	if (size+OBJ_HEADER_SIZE+offset > SC_SMALL_MAXCLASS) {
 		//assert(search_large_pointer(ptr) == NULL);
 		//assert(search_large_pointer(ptr+size-1) == NULL);
-		add_large_pointer(ptr);
+		add_large_pointer((char*)ptr - offset);
 	}
 
 	if (event_id > min_events) {
@@ -203,6 +210,7 @@ static void *make_obj_header(void *ptr, size_t size) {
 	}
 	struct obj_header *header = (struct obj_header*)ptr;
 	header->magic = MAGIC_NUMBER;
+	header->offset = offset;
 	header->size = (unsigned)size;
 	return &header[1];
 }
@@ -213,7 +221,9 @@ static void *get_obj_header(void *ptr) {
 	}
 	struct obj_header *header = ((struct obj_header*)ptr) - 1;
 	assert(header->magic == MAGIC_NUMBER);
-	if (header->size  > SC_SMALL_MAXCLASS - OBJ_HEADER_SIZE) {
+	unsigned short offset = header->offset;
+	char *head = (char*)header - offset;
+	if (header->size  > SC_SMALL_MAXCLASS - OBJ_HEADER_SIZE - offset) {
 		//assert(search_large_pointer(ptr));
 		//assert(search_large_pointer(ptr+header->size-1));
 		//size_t size = header->size + OBJ_HEADER_SIZE;
@@ -221,9 +231,9 @@ static void *get_obj_header(void *ptr) {
 		//void *base = _je_san_get_base(eptr);
 		//assert(base == (void*)header);
 
-		remove_large_pointer(header);
+		remove_large_pointer(head);
 	}
-	return header;
+	return head;
 
 }
 
@@ -2651,10 +2661,10 @@ static void* get_stack_ptr_base(void *ptr) {
 			unsigned size = sizeptr[0];
 			if ((char*)ptr < ((char*)stack_ptrs[i]) + size) {
 				unsigned *ret = sizeptr - 1;
-				if (ret[0] != 0xdeadface) {
+				if (!IS_MAGIC(ret[0])) {
 					return NULL;
 				}
-				assert(ret[0] == 0xdeadface);
+				assert(IS_MAGIC(ret[0]));
 				return ret;
 			}
 		}
@@ -2667,11 +2677,11 @@ static void* get_stack_ptr_base(void *ptr) {
 
 #define STACK_SIZE (8092 * 1024)
 
-struct obj_header fake_header = {MAGIC_NUMBER, 0xfffffff};
+struct obj_header fake_header = {MAGIC_NUMBER, 0, 0xfffffff};
 
 static void *get_global_header(unsigned *ptr) {
 	int iter = 0;
-	while (ptr[0] != MAGIC_NUMBER && iter++ < 1000) {
+	while (!IS_MAGIC(ptr[0]) && iter++ < 1000) {
 		ptr--;
 	}
 	if (ptr[0] != MAGIC_NUMBER) {
@@ -2737,7 +2747,7 @@ void JEMALLOC_NOTHROW *
 JEMALLOC_ATTR(malloc) JEMALLOC_ALLOC_SIZE(1)
 je_malloc(size_t size) {
 	void *ret = _je_malloc(size + OBJ_HEADER_SIZE);
-	return make_obj_header(ret, size);
+	return make_obj_header(ret, size, 0);
 }
 
 JEMALLOC_EXPORT
@@ -2908,12 +2918,12 @@ void* je_san_page_fault_len(void *ptr, int line, char *name) {
 	unsigned magic = *(optr-1);
 	unsigned *head;
 	//malloc_printf("magic:%x size:%x\n", magic, optr[0]);
-	if (magic != 0xdeadface || ptr != optr) {
+	if (!IS_MAGIC(magic) || ptr != optr) {
 		head = _je_san_get_base(optr);
-		if (head[0] != 0xdeadface) {
+		if (!IS_MAGIC(head[0])) {
 			malloc_printf("optr:%p head:%p\n", optr, head);
 		}
-		assert(head[0] == 0xdeadface);
+		assert(IS_MAGIC(head[0]));
 		if (ptr > (void*)0x80000000 && !is_stack_ptr(ptr)) {
 			if (ptr == optr) {
 				print_all_obstack();
@@ -3588,7 +3598,22 @@ char *je_strcat(char *_dst, const char *_src) {
 
 JEMALLOC_EXPORT int JEMALLOC_NOTHROW
 JEMALLOC_ATTR(nonnull(1))
-je_posix_memalign(void **memptr, size_t alignment, size_t size) {
+je_posix_memalign(void **memptr, size_t alignment, size_t _size) {
+
+	size_t size = _size + ALIGN_PAD(alignment) + OBJ_HEADER_SIZE;
+	size_t offset;
+	char *head = _je_malloc(size);
+	char *ret = head;
+	assert(ret);
+	ret += OBJ_HEADER_SIZE;
+	ret = JE_ALIGN(ret, alignment);
+	ret -= OBJ_HEADER_SIZE;
+	offset = ret - head;
+	assert(OBJ_HEADER_SIZE + offset + _size <= size);
+	memptr[0] = make_obj_header(ret, _size, offset);
+	return 0;
+
+#if 0
 	assert(0);
 	int ret;
 	static_opts_t sopts;
@@ -3622,14 +3647,27 @@ je_posix_memalign(void **memptr, size_t alignment, size_t size) {
 
 	LOG("core.posix_memalign.exit", "result: %d, alloc ptr: %p", ret,
 	    *memptr);
-
 	return ret;
+#endif
 }
+
 
 JEMALLOC_EXPORT JEMALLOC_ALLOCATOR JEMALLOC_RESTRICT_RETURN
 void JEMALLOC_NOTHROW *
 JEMALLOC_ATTR(malloc) JEMALLOC_ALLOC_SIZE(2)
-je_aligned_alloc(size_t alignment, size_t size) {
+je_aligned_alloc(size_t alignment, size_t _size) {
+	size_t size = _size + ALIGN_PAD(alignment) + OBJ_HEADER_SIZE;
+	size_t offset;
+	char *head = _je_malloc(size);
+	char *ret = head;
+	assert(ret);
+	ret += OBJ_HEADER_SIZE;
+	ret = JE_ALIGN(ret, alignment);
+	ret -= OBJ_HEADER_SIZE;
+	offset = ret - head;
+	assert(OBJ_HEADER_SIZE + offset + _size <= size);
+	return make_obj_header(ret, _size, offset);
+#if 0
 	assert(0);
 	void *ret;
 
@@ -3666,6 +3704,7 @@ je_aligned_alloc(size_t alignment, size_t size) {
 	LOG("core.aligned_alloc.exit", "result: %p", ret);
 
 	return ret;
+#endif
 }
 
 #if 0
@@ -3711,7 +3750,7 @@ je_calloc(size_t num, size_t size) {
 	size_t total_size = num * size;
 	void *ret = _je_malloc(total_size + OBJ_HEADER_SIZE);
 	if (ret) {
-		ret = make_obj_header(ret, total_size);
+		ret = make_obj_header(ret, total_size, 0);
 		bzero(ret, total_size);
 	}
 	return ret;
@@ -3987,7 +4026,7 @@ JEMALLOC_ALLOC_SIZE(2)
 je_realloc(void *ptr, size_t arg_size) {
 	void *head = get_obj_header(ptr);
 	void *newptr = _je_realloc(head, arg_size + OBJ_HEADER_SIZE);
-	return make_obj_header(newptr, arg_size);
+	return make_obj_header(newptr, arg_size, 0);
 }
 
 JEMALLOC_NOINLINE
