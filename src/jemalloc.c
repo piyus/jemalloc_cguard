@@ -205,9 +205,9 @@ static void *make_obj_header(void *ptr, size_t size, unsigned short offset) {
 		add_large_pointer((char*)ptr - offset);
 	}
 
-	if (event_id > min_events) {
-		malloc_printf("mal ptr:%p sz:%zd\n", ptr, size);
-	}
+	//if (event_id > min_events) {
+		malloc_printf("mal ptr:%p sz:%zd offset:%d\n", ptr, size, (int)offset);
+	//}
 	struct obj_header *header = (struct obj_header*)ptr;
 	header->magic = MAGIC_NUMBER;
 	header->offset = offset;
@@ -3186,6 +3186,22 @@ int je_vfprintf(FILE *stream, const char *fmt, va_list ap)
 		fptr = get_func_addr("vfprintf", je_vfprintf);
 	}
 	int ret = fptr(stream, fmt, ap);
+	restore_varg(fixes, vals, num_fixes);
+	return ret;
+}
+
+JEMALLOC_EXPORT
+int je_vsnprintf(char *s, size_t n, const char *fmt, va_list ap)
+{
+	unsigned long long *fixes[MAX_INTERIOR];
+	unsigned long long vals[MAX_INTERIOR];
+	int num_fixes = fix_varg_interiors(ap, fixes, vals);
+	static int (*fptr)(char*, size_t, const char*, va_list) = NULL;
+
+	if (fptr == NULL) {
+		fptr = get_func_addr("vsnprintf", je_vsnprintf);
+	}
+	int ret = fptr(s, n, fmt, ap);
 	restore_varg(fixes, vals, num_fixes);
 	return ret;
 }
