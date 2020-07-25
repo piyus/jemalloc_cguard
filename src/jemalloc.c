@@ -205,9 +205,17 @@ static void *make_obj_header(void *ptr, size_t size, unsigned short offset) {
 		add_large_pointer((char*)ptr - offset);
 	}
 
-	//if (event_id > min_events) {
+	if (offset) {
+		assert(offset >= 8);
+		struct obj_header *header = (struct obj_header*)((char*)ptr - offset);
+		header->magic = MAGIC_NUMBER;
+		header->offset = 0;
+		header->size = (unsigned)size + offset;
+	}
+
+	if (event_id > min_events) {
 		malloc_printf("mal ptr:%p sz:%zd offset:%d\n", ptr, size, (int)offset);
-	//}
+	}
 	struct obj_header *header = (struct obj_header*)ptr;
 	header->magic = MAGIC_NUMBER;
 	header->offset = offset;
