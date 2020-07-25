@@ -3143,6 +3143,27 @@ int je_vasprintf(char **strp, const char *fmt, va_list ap)
   return ret;
 }
 
+#undef __ctype_tolower_loc
+
+JEMALLOC_EXPORT
+const __int32_t** je___ctype_tolower_loc(void)
+{
+	static int **retptr = NULL;
+	if (retptr != NULL) {
+		return (const int**)retptr;
+	}
+	retptr = (int**)je_malloc(sizeof(int*));
+	assert(retptr);
+	size_t size = sizeof(int) * 384;
+	retptr[0] = (int*)je_malloc(size);
+	assert(retptr[0]);
+	int** (*fptr)(void) = NULL;
+	fptr = get_func_addr("__ctype_tolower_loc", je___ctype_tolower_loc);
+	int **orig = fptr();
+	memcpy(retptr[0], orig[0], size);
+	return (const int**)retptr;
+}
+
 JEMALLOC_EXPORT
 int je_vfprintf(FILE *stream, const char *fmt, va_list ap)
 {
