@@ -3060,6 +3060,8 @@ static int fix_varg_interiors(va_list ap, unsigned long long **fixes, unsigned l
 
 #include "wordcopy.c"
 
+// Indirect call 
+
 JEMALLOC_EXPORT
 void *
 je_memcpy (void *dstpp, const void *srcpp, size_t len)
@@ -3100,6 +3102,8 @@ je_memcpy (void *dstpp, const void *srcpp, size_t len)
 typedef __attribute__((__may_alias__)) size_t WT;
 #define WS (sizeof(WT))
 #endif
+
+// Indirect call 
 
 JEMALLOC_EXPORT
 void *je_memmove(void *_dest, const void *_src, size_t n)
