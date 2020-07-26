@@ -3165,6 +3165,17 @@ int je_vasprintf(char **strp, const char *fmt, va_list ap)
   return ret;
 }
 
+JEMALLOC_EXPORT
+int je_asprintf (char **string_ptr, const char *format, ...)
+{
+  va_list arg;
+  int done;
+  va_start (arg, format);
+  done = je_vasprintf(string_ptr, format, arg);
+  va_end (arg);
+  return done;
+}
+
 
 #undef __ctype_b_loc
 
