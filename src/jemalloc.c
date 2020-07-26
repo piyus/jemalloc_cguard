@@ -32,7 +32,7 @@
 #define JE_ALIGN(x, y) (char*)(((size_t)(x) + ALIGN_PAD(y)) & ALIGN_MASK(y))
 
 static unsigned long long event_id = 1;
-static unsigned long long min_events = 0xffff4800000000ULL;
+static unsigned long long min_events = 0; //0xffff4800000000ULL;
 
 struct obj_header {
 	unsigned short magic;
@@ -2686,6 +2686,7 @@ static void* get_stack_ptr_base(void *ptr) {
 #define STACK_SIZE (8092 * 1024)
 
 struct obj_header fake_header = {MAGIC_NUMBER, 0, 0xfffffff};
+struct obj_header fake_global_header = {MAGIC_NUMBER, 0, 0xfffffff};
 
 static void *get_global_header(unsigned *ptr) {
 	int iter = 0;
@@ -2693,7 +2694,7 @@ static void *get_global_header(unsigned *ptr) {
 		ptr--;
 	}
 	if (ptr[0] != MAGIC_NUMBER) {
-		return &fake_header;
+		return &fake_global_header;
 	}
 	return ptr;
 }
@@ -2928,6 +2929,10 @@ void* je_san_page_fault_len(void *ptr, int line, char *name) {
 	//malloc_printf("magic:%x size:%x\n", magic, optr[0]);
 	if (!IS_MAGIC(magic) || ptr != optr) {
 		head = _je_san_get_base(optr);
+		if (head == (unsigned*)&fake_header) {
+			malloc_printf("%lld ptr:%p head:%p line:%d\n", event_id, optr, head, line);
+			assert(0);
+		}
 		if (!IS_MAGIC(head[0])) {
 			malloc_printf("optr:%p head:%p\n", optr, head);
 		}
