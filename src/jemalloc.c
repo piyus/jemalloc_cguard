@@ -32,7 +32,7 @@
 #define JE_ALIGN(x, y) (char*)(((size_t)(x) + ALIGN_PAD(y)) & ALIGN_MASK(y))
 
 static unsigned long long event_id = 1;
-static unsigned long long min_events = 0; //0xffff4800000000ULL;
+static unsigned long long min_events = 0xffff4800000000ULL;
 
 struct obj_header {
 	unsigned short magic;
@@ -2635,41 +2635,50 @@ static void *stack_ptrs[MAX_STACK_PTRS];
 static int num_stack_ptrs = 0;
 
 JEMALLOC_EXPORT
-void je_san_enter_scope() {
-	assert(num_stack_ptrs < MAX_STACK_PTRS);
-	//malloc_printf("enter_scope\n");
-	stack_ptrs[num_stack_ptrs] = NULL;
-	num_stack_ptrs++;
+void* je_san_enter_scope() {
+	//malloc_printf("enter_scope %d\n", num_stack_ptrs);
+	return &stack_ptrs[num_stack_ptrs];
 }
 
 JEMALLOC_EXPORT
-void je_san_exit_scope() {
-	assert(num_stack_ptrs >= 1);
-	num_stack_ptrs--;
-	//malloc_printf("exit_scope\n");
-	while (stack_ptrs[num_stack_ptrs]) {
-		num_stack_ptrs--;
-		assert(num_stack_ptrs >= 0);
-	}
+void je_san_exit_scope(char *ptr) {
+	num_stack_ptrs = (ptr - (char*)&stack_ptrs[0]) / sizeof(void*);
+	//malloc_printf("exit_scope :%d\n", num_stack_ptrs);
 }
 
+// change llvm before changing name
 JEMALLOC_EXPORT
 void je_san_record_stack_pointer(void *ptr) {
 	assert(num_stack_ptrs < MAX_STACK_PTRS);
+	assert(ptr);
 	stack_ptrs[num_stack_ptrs] = ptr;
-	//malloc_printf("recording:%p\n", ptr);
+	//malloc_printf("recording:%p sz:%llx %d\n", ptr, *(((unsigned long long*)ptr) - 1), num_stack_ptrs);
 	num_stack_ptrs++;
+}
+
+static void print_stack(void *ptr) {
+	int i;
+	malloc_printf("num_stack_ptrs:%d\n", num_stack_ptrs);
+	for (i = num_stack_ptrs-1; i >= 0; i--) {
+		assert(stack_ptrs[i]);
+		unsigned *sizeptr = ((unsigned*)stack_ptrs[i]) - 1;
+		unsigned size = sizeptr[0];
+		malloc_printf("size:%x magic:%x sizeptr:%p ptr:%p\n", size, *(sizeptr-1), sizeptr, ptr);
+	}
 }
 
 static void* get_stack_ptr_base(void *ptr) {
 	int i;
 	for (i = num_stack_ptrs-1; i > 0; i--) {
-		if (stack_ptrs[i] && ptr >= stack_ptrs[i]) {
-			unsigned *sizeptr = ((unsigned*)stack_ptrs[i]) - 1;
+		assert(stack_ptrs[i]);
+		unsigned *sizeptr = ((unsigned*)stack_ptrs[i]) - 1;
+		if ((unsigned*)ptr >= sizeptr) {
 			unsigned size = sizeptr[0];
 			if ((char*)ptr < ((char*)stack_ptrs[i]) + size) {
 				unsigned *ret = sizeptr - 1;
 				if (!IS_MAGIC(ret[0])) {
+					malloc_printf("no magic\n");
+					print_stack(ptr);
 					return NULL;
 				}
 				assert(IS_MAGIC(ret[0]));
@@ -2677,6 +2686,7 @@ static void* get_stack_ptr_base(void *ptr) {
 			}
 		}
 	}
+	print_stack(ptr);
 	return NULL;
 }
 
@@ -2855,6 +2865,16 @@ void* je_san_page_fault_store(void *ptr, void *val, int line, char *name) {
 	//printf("base:%p optr:%p ptr:%p\n", base, optr, ptr);
 #endif
 	return optr;
+}
+
+// change llvm before changing the name
+JEMALLOC_EXPORT
+void je_san_alloca(void *ptr1, size_t size, int line, char *name) {
+	event_id++;
+	if (event_id > min_events) {
+		name = (name < (char*)0x1000) ? null_name : name;
+		malloc_printf("%lld alloca: ptr:%p sz:%zd %s():%d %d %d\n", event_id, ptr1, size, name, (line & 0xffff), (line>>16), line);
+	}
 }
 
 JEMALLOC_EXPORT
