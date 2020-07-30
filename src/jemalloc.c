@@ -32,7 +32,7 @@
 #define JE_ALIGN(x, y) (char*)(((size_t)(x) + ALIGN_PAD(y)) & ALIGN_MASK(y))
 
 static unsigned long long event_id = 1;
-static unsigned long long min_events = 0xffff4800000000ULL;
+static unsigned long long min_events = 10770000000ULL; // 0xffff4800000000ULL;
 
 struct obj_header {
 	unsigned short magic;
@@ -2633,17 +2633,26 @@ _je_malloc(size_t size) {
 #define MAX_STACK_PTRS 102400
 static void *stack_ptrs[MAX_STACK_PTRS];
 static int num_stack_ptrs = 0;
+static void *callstack[MAX_STACK_PTRS];
+static int num_callstack = 0;
 
 JEMALLOC_EXPORT
 void* je_san_enter_scope() {
-	//malloc_printf("enter_scope %d\n", num_stack_ptrs);
+	callstack[num_callstack++] = (void*)&stack_ptrs[num_stack_ptrs];
+	if (event_id > min_events) {
+		malloc_printf("enter_scope %d\n", num_stack_ptrs);
+	}
 	return &stack_ptrs[num_stack_ptrs];
 }
 
 JEMALLOC_EXPORT
 void je_san_exit_scope(char *ptr) {
+	assert(callstack[num_callstack-1] == (void*)ptr);
+	num_callstack--;
 	num_stack_ptrs = (ptr - (char*)&stack_ptrs[0]) / sizeof(void*);
-	//malloc_printf("exit_scope :%d\n", num_stack_ptrs);
+	if (event_id > min_events) {
+		malloc_printf("exit_scope :%d\n", num_stack_ptrs);
+	}
 }
 
 // change llvm before changing name
@@ -2652,7 +2661,9 @@ void je_san_record_stack_pointer(void *ptr) {
 	assert(num_stack_ptrs < MAX_STACK_PTRS);
 	assert(ptr);
 	stack_ptrs[num_stack_ptrs] = ptr;
-	//malloc_printf("recording:%p sz:%llx %d\n", ptr, *(((unsigned long long*)ptr) - 1), num_stack_ptrs);
+	if (event_id > min_events) {
+		malloc_printf("recording:%p sz:%llx %d\n", ptr, *(((unsigned long long*)ptr) - 1), num_stack_ptrs);
+	}
 	num_stack_ptrs++;
 }
 
@@ -2663,7 +2674,7 @@ static void print_stack(void *ptr) {
 		assert(stack_ptrs[i]);
 		unsigned *sizeptr = ((unsigned*)stack_ptrs[i]) - 1;
 		unsigned size = sizeptr[0];
-		malloc_printf("size:%x magic:%x sizeptr:%p ptr:%p\n", size, *(sizeptr-1), sizeptr, ptr);
+		malloc_printf("size:%d magic:%x start:%p ptr:%p\n", size, *(sizeptr-1), sizeptr+1, ptr);
 	}
 }
 
@@ -2847,8 +2858,8 @@ void* je_san_page_fault_store(void *ptr, void *val, int line, char *name) {
 	event_id++;
 	void *optr = (void*)UNMASK(ptr);
 	if (event_id > min_events || need_tracking((unsigned long long)val)) {
-		name = (name < (char*)0x1000) ? null_name : name;
-		printf("%lld store: ptr:%p val:%p %s(): %d %d %d\n", event_id, ptr, val, name, (line & 0xffff), (line>>16), line);
+		name = (name < (char*)0x1000) ? null_name : UNMASK(name);
+		malloc_printf("%lld store: ptr:%p val:%p %s(): %d %d %d\n", event_id, ptr, val, name, (line & 0xffff), (line>>16), line);
 	}
 #if 0
 	void *oval = (void*)(((unsigned long long)val) & 0x7fffffffffffffffULL);
