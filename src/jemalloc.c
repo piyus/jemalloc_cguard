@@ -32,7 +32,7 @@
 #define JE_ALIGN(x, y) (char*)(((size_t)(x) + ALIGN_PAD(y)) & ALIGN_MASK(y))
 
 static unsigned long long event_id = 1;
-static unsigned long long min_events = 10770000000ULL; // 0xffff4800000000ULL;
+static unsigned long long min_events = 0xffff4800000000ULL;
 
 struct obj_header {
 	unsigned short magic;
@@ -95,6 +95,7 @@ static char *je_stack_begin = NULL;
 #define TRACK_STR 0 //0xcaba76ULL
 #define TRACK_SHIFT 40
 #define UNMASK(x) ((char*)((((uint64_t)(x)) & 0xffffffffffffULL)))
+//#define _MASK(x) (char*)(x) //((char*)((((uint64_t)(x)) | (INTERIOR_STR << 48))))
 #define _MASK(x) ((char*)((((uint64_t)(x)) | (INTERIOR_STR << 48))))
 
 static bool need_tracking(unsigned long long val) {
