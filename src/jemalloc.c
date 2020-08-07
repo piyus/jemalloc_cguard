@@ -2860,7 +2860,7 @@ void* je_san_page_fault_store(void *ptr, void *val, int line, char *name) {
 	event_id++;
 	void *optr = (void*)UNMASK(ptr);
 	if (event_id > min_events || need_tracking((unsigned long long)val)) {
-		name = (name < (char*)0x1000) ? null_name : UNMASK(name);
+		name = (name < (char*)0x1000000000) ? null_name : UNMASK(name);
 		malloc_printf("%lld store: ptr:%p val:%p %s(): %d %d %d\n", event_id, ptr, val, name, (line & 0xffff), (line>>16), line);
 	}
 #if 0
