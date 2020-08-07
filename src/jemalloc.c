@@ -2743,6 +2743,7 @@ static void *_je_san_get_base(void *ptr) {
 			return ret;
 		}
 		else {
+			assert(0);
 			return &fake_header;
 		}
 	}
@@ -2969,7 +2970,7 @@ void* je_san_page_fault_len(void *ptr, int line, char *name) {
 			malloc_printf("optr:%p head:%p\n", optr, head);
 		}
 		assert(IS_MAGIC(head[0]));
-		if (ptr > (void*)0x80000000 && !is_stack_ptr(ptr)) {
+		if (ptr > (void*)0x80000000/* && !is_stack_ptr(ptr)*/) {
 			if (ptr == optr) {
 				print_all_obstack();
 				malloc_printf("%lld ptr:%p head:%p line:%d\n", event_id, optr, head, line);
@@ -3575,7 +3576,7 @@ static void myfunc3(void)
 
 JEMALLOC_EXPORT
 void je_san_abort2(void *base, void *cur, void *limit, void *ptrlimit, void *size, void *callsite) {
-	if (UNMASK(base) < (char*)0x80000000 || is_stack_ptr(UNMASK(base))) {
+	if (UNMASK(base) < (char*)0x80000000 /*|| is_stack_ptr(UNMASK(base))*/) {
 		return;
 	}
 	if (cur < base) {
