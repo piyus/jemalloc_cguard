@@ -2641,18 +2641,35 @@ JEMALLOC_EXPORT
 void* je_san_enter_scope() {
 	callstack[num_callstack++] = (void*)&stack_ptrs[num_stack_ptrs];
 	if (event_id > min_events) {
-		malloc_printf("enter_scope %d\n", num_stack_ptrs);
+		malloc_printf("enter_scope %d %p\n", num_stack_ptrs, &stack_ptrs[num_stack_ptrs]);
 	}
 	return &stack_ptrs[num_stack_ptrs];
 }
 
 JEMALLOC_EXPORT
 void je_san_exit_scope(char *ptr) {
-	assert(callstack[num_callstack-1] == (void*)ptr);
 	num_callstack--;
 	num_stack_ptrs = (ptr - (char*)&stack_ptrs[0]) / sizeof(void*);
 	if (event_id > min_events) {
-		malloc_printf("exit_scope :%d\n", num_stack_ptrs);
+		malloc_printf("exit_scope :%d %p\n", num_stack_ptrs, ptr);
+	}
+	assert(callstack[num_callstack] == (void*)ptr);
+}
+
+JEMALLOC_EXPORT
+void je_san_restore_scope(char *ptr) {
+	assert(num_callstack > 0);
+	while (callstack[num_callstack-1] != ptr) {
+		num_callstack--;
+		assert(num_callstack > 0);
+	}
+	void *top_ptr = (void*)&ptr;
+	int i;
+	for (i = num_stack_ptrs-1; i >= 0 && stack_ptrs[i] <= top_ptr; i--) {
+		num_stack_ptrs--;
+	}
+	if (event_id > min_events) {
+		malloc_printf("restore_scope :%d %p\n", num_stack_ptrs, ptr);
 	}
 }
 
@@ -2681,7 +2698,7 @@ static void print_stack(void *ptr) {
 
 static void* get_stack_ptr_base(void *ptr) {
 	int i;
-	for (i = num_stack_ptrs-1; i > 0; i--) {
+	for (i = num_stack_ptrs-1; i >= 0; i--) {
 		assert(stack_ptrs[i]);
 		unsigned *sizeptr = ((unsigned*)stack_ptrs[i]) - 1;
 		if ((unsigned*)ptr >= sizeptr) {
@@ -2904,7 +2921,7 @@ void je_san_page_fault_ret(void *ptr, int line, char *name) {
 	event_id++;
 	if (event_id > min_events) {
 		name = (name < (char*)0x1000) ? null_name : name;
-		printf("%lld ret: ptr:%p %s():%d %d %d\n", event_id, ptr, name, (line & 0xffff), (line>>16), line);
+		malloc_printf("%lld ret: ptr:%p %s():%d %d %d\n", event_id, ptr, name, (line & 0xffff), (line>>16), line);
 	}
 	//void *base = NULL; //je_san_get_base(optr);
 	//printf("base:%p optr:%p ptr:%p\n", base, optr, ptr);

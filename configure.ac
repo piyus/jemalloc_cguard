@@ -971,7 +971,7 @@ AC_ARG_WITH([export],
 fi]
 )
 
-public_syms="aligned_alloc calloc dallocx free mallctl mallctlbymib mallctlnametomib malloc malloc_conf malloc_message malloc_stats_print malloc_usable_size mallocx smallocx_${jemalloc_version_gid} nallocx posix_memalign rallocx realloc sallocx sdallocx xallocx san_get_base san_abort2 san_copy_argv san_page_fault san_page_fault_len san_enter_scope san_exit_scope san_record_stack_pointer san_page_fault_store san_page_fault_call san_page_fault_load san_page_fault_arg _obstack_newchunk _obstack_begin vasprintf asprintf obstack_free _obstack_memory_used __getdelim san_make_interior san_icmp san_memcpy san_copy_env strstr strchr strrchr strncat strcat qsort vfprintf san_page_fault_ret san_call memmove memcpy __ctype_tolower_loc vsnprintf __ctype_toupper_loc __ctype_b_loc san_alloca"
+public_syms="aligned_alloc calloc dallocx free mallctl mallctlbymib mallctlnametomib malloc malloc_conf malloc_message malloc_stats_print malloc_usable_size mallocx smallocx_${jemalloc_version_gid} nallocx posix_memalign rallocx realloc sallocx sdallocx xallocx san_get_base san_abort2 san_copy_argv san_page_fault san_page_fault_len san_enter_scope san_exit_scope san_record_stack_pointer san_page_fault_store san_page_fault_call san_page_fault_load san_page_fault_arg _obstack_newchunk _obstack_begin vasprintf asprintf obstack_free _obstack_memory_used __getdelim san_make_interior san_icmp san_memcpy san_copy_env strstr strchr strrchr strncat strcat qsort vfprintf san_page_fault_ret san_call memmove memcpy __ctype_tolower_loc vsnprintf __ctype_toupper_loc __ctype_b_loc san_alloca san_restore_scope"
 dnl Check for additional platform-specific public API functions.
 AC_CHECK_FUNC([memalign],
 	      [AC_DEFINE([JEMALLOC_OVERRIDE_MEMALIGN], [ ])
