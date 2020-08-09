@@ -2687,7 +2687,7 @@ void je_san_record_stack_pointer(void *ptr) {
 
 static void print_stack(void *ptr) {
 	int i;
-	malloc_printf("num_stack_ptrs:%d\n", num_stack_ptrs);
+	malloc_printf("num_stack_ptrs:%d event_id:%lld\n", num_stack_ptrs, event_id);
 	for (i = num_stack_ptrs-1; i >= 0; i--) {
 		assert(stack_ptrs[i]);
 		unsigned *sizeptr = ((unsigned*)stack_ptrs[i]) - 1;
