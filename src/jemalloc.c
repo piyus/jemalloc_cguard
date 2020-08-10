@@ -2731,12 +2731,12 @@ static void *get_global_header(unsigned *ptr) {
 	int iter = 0;
 	unsigned *base = ptr;
 	while (!IS_MAGIC(ptr[0]) && iter++ < 1000000) {
-		ptr--;
+		ptr = (unsigned*)(((char*)ptr) -1);
 	}
 	if (ptr[0] != MAGIC_NUMBER) {
 		malloc_printf("unable to find base corresponding to %p ptr:%p\n", base, ptr);
 		assert(0);
-		return &fake_global_header;
+		return NULL;
 	}
 	return ptr;
 }
@@ -2764,7 +2764,7 @@ static void *_je_san_get_base(void *ptr) {
 		}
 		else {
 			assert(0);
-			return &fake_header;
+			return NULL;
 		}
 	}
 
@@ -2879,7 +2879,8 @@ JEMALLOC_EXPORT
 void* je_san_page_fault_store(void *ptr, void *val, int line, char *name) {
 	event_id++;
 	void *optr = (void*)UNMASK(ptr);
-	if (event_id > min_events || need_tracking((unsigned long long)val)) {
+	//void *oval = (void*)UNMASK(val);
+	if (event_id > min_events || need_tracking((unsigned long long)val)/* || oval < (void*)0x80000000*/) {
 		name = (name < (char*)0x1000000000) ? null_name : UNMASK(name);
 		malloc_printf("%lld store: ptr:%p val:%p %s(): %d %d %d\n", event_id, ptr, val, name, (line & 0xffff), (line>>16), line);
 	}
@@ -2982,10 +2983,7 @@ void* je_san_page_fault_len(void *ptr, int line, char *name) {
 	//malloc_printf("magic:%x size:%x\n", magic, optr[0]);
 	if (!IS_MAGIC(magic) || ptr != optr) {
 		head = _je_san_get_base(optr);
-		if (head == (unsigned*)&fake_header) {
-			malloc_printf("%lld ptr:%p head:%p line:%d\n", event_id, optr, head, line);
-			assert(0);
-		}
+
 		if (!IS_MAGIC(head[0])) {
 			malloc_printf("optr:%p head:%p\n", optr, head);
 		}
@@ -3600,9 +3598,16 @@ void je_san_abort2(void *base, void *cur, void *limit, void *ptrlimit, void *siz
 		//return;
 	}
 	if (cur < base) {
-		void *_base = (void*)UNMASK(base);
-		void *_cur = (void*)UNMASK(cur);
-		void *orig_base = je_san_get_base(_base);
+		char *_base = (void*)UNMASK(base);
+		char *_cur = (void*)UNMASK(cur);
+		char *orig_base;
+		if (_cur < (char*)0x8000000) {
+			orig_base = je_san_get_base(_cur);
+			assert(orig_base + *((unsigned*)(orig_base-4)) >= _base);
+		}
+		else {
+			orig_base = je_san_get_base(_base);
+		}
 		if (orig_base && _cur >= orig_base) {
 			return;
 		}
@@ -3614,9 +3619,9 @@ void je_san_abort2(void *base, void *cur, void *limit, void *ptrlimit, void *siz
 	unsigned len = *((unsigned*)_base - 1);
 	unsigned magic = *((unsigned*)_base -2);
 	char *end = (char*)_base + len;
-	malloc_printf("base:%p cur:%p len:%d magic:%x end:%p\n"
+	malloc_printf("%lld base:%p cur:%p len:%d magic:%x end:%p\n"
 								"limit:%p ptrlimit:%p size:%p callsite:%p\n",
-								base, cur, len, magic, end, limit, ptrlimit, size, callsite);
+								event_id, base, cur, len, magic, end, limit, ptrlimit, size, callsite);
 	malloc_printf("head:%p head0:%x head1:%x\n", head, head[0], head[1]);
 	myfunc3();
 	abort();
