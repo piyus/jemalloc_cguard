@@ -3709,6 +3709,49 @@ char* je_strchr(const char *_s, int c) {
 }
 
 JEMALLOC_EXPORT
+char *
+je_strtok(char *_s, const char *delim)
+{
+	char *s = (char*)UNMASK(_s);
+  char *end;
+  if (s == NULL) {
+    return NULL;
+	}
+
+  if (*s == '\0')
+    {
+      return NULL;
+    }
+  /* Scan leading delimiters.  */
+  s += strspn (s, delim);
+  if (*s == '\0')
+    {
+      return NULL;
+    }
+  /* Find the end of the token.  */
+  end = s + strcspn (s, delim);
+  if (*end == '\0')
+    {
+      return (s == _s) ? _s : _MASK(s);
+    }
+  /* Terminate the token and make *SAVE_PTR point past it.  */
+  *end = '\0';
+  return (s == _s) ? _s : _MASK(s);
+}
+
+JEMALLOC_EXPORT
+void* je_memchr(const void *_s, int c, size_t n) {
+	const char *s = (const char*)UNMASK(_s);
+	size_t i;
+  for (i = 0; i < n; i++) {
+    if (s[i] == (char)c) {
+      return (i == 0) ? (void*)_s : (void*)(_MASK(&s[i]));
+		}
+  }
+	return NULL;
+}
+
+JEMALLOC_EXPORT
 char *je_strrchr(const char *_s, int c) {
   const char *res = NULL;
 	const char *s = (const char*)UNMASK(_s);
