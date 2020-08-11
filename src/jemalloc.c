@@ -193,7 +193,7 @@ static void remove_large_pointer(void *ptr) {
 
 #define MAGIC_NUMBER 0xface
 
-#define IS_MAGIC(x) (((x) & 0xffff) == MAGIC_NUMBER)
+#define IS_MAGIC(x) (((x) & 0xffffffff) == MAGIC_NUMBER)
 
 static void *make_obj_header(void *ptr, size_t size, unsigned short offset) {
 	if (ptr == NULL) {
@@ -2730,7 +2730,7 @@ struct obj_header fake_global_header = {MAGIC_NUMBER, 0, 0xfffffff};
 static void *get_global_header(unsigned *ptr) {
 	int iter = 0;
 	unsigned *base = ptr;
-	while (!IS_MAGIC(ptr[0]) && iter++ < 1000000) {
+	while (!IS_MAGIC(ptr[0]) && iter++ < 10000000) {
 		ptr = (unsigned*)(((char*)ptr) -1);
 	}
 	if (ptr[0] != MAGIC_NUMBER) {
@@ -2763,6 +2763,7 @@ static void *_je_san_get_base(void *ptr) {
 			return ret;
 		}
 		else {
+			malloc_printf("unable to find base corresponding to : %p\n", ptr);
 			assert(0);
 			return NULL;
 		}
