@@ -23,7 +23,6 @@
 
 #define INTERIOR_STR 0xcabaULL
 
-#include "qsort.c"
 
 #undef obstack_free
 
@@ -91,12 +90,14 @@ static char *je_stack_begin = NULL;
 //static void *large_ptrs[MAX_LARGE_PTRS];
 //static int num_large_ptrs = 0;
 
-#define INTERIOR_STR1 0xcaba7fULL
+#define INTERIOR_STR1 0xcabaULL
 #define TRACK_STR 0 //0xcaba76ULL
 #define TRACK_SHIFT 40
 #define UNMASK(x) ((char*)((((uint64_t)(x)) & 0xffffffffffffULL)))
 //#define _MASK(x) (char*)(x) //((char*)((((uint64_t)(x)) | (INTERIOR_STR << 48))))
 #define _MASK(x) ((char*)((((uint64_t)(x)) | (INTERIOR_STR << 48))))
+
+#include "qsort.c"
 
 static bool need_tracking(unsigned long long val) {
 	if (!TRACK_STR) {
@@ -2841,7 +2842,7 @@ void je_san_icmp(unsigned long long val1, unsigned long long val2, int line, cha
 	if (val1 == (unsigned long long)-1 || val2 == (unsigned long long)-1) {
 		return;
 	}
-	if ((val1 >> 40) == INTERIOR_STR1 || (val2 >> 40) == INTERIOR_STR1) {
+	if ((val1 >> 48) == INTERIOR_STR || (val2 >> 48) == INTERIOR_STR) {
 		name = (name < (char*)0x1000) ? null_name : name;
 		malloc_printf("%lld %lld icmp: val1:%llx val2:%llx %s():%d %d %d\n", 
 			event_id, min_events, val1, val2, name, (line & 0xffff), (line>>16), line);
@@ -3740,6 +3741,96 @@ je_strtok(char *_s, const char *delim)
 }
 
 JEMALLOC_EXPORT
+int
+je_putenv(char *_name)
+{
+	char *name = (char*)UNMASK(_name);
+	static int (*fptr)(char*) = NULL;
+
+	if (fptr == NULL) {
+		fptr = get_func_addr("putenv", je_putenv);
+	}
+	return fptr(name);
+}
+
+#define GET_INTERIOR(x, y) ((x == NULL || ((void*)(x) == (void*)(y))) ? (void*)(x) : (void*)_MASK(x))
+
+JEMALLOC_EXPORT
+void *
+je_memchr(void const *_s, int c_in, size_t n)
+{
+	void const *s = (void const*)UNMASK(_s);
+#if 0
+	void *ret;
+
+	static void* (*fptr)(void const *, int, size_t) = NULL;
+	if (fptr == NULL) {
+		fptr = get_func_addr("memchr", je_memchr);
+	}
+	ret = fptr(s, c_in, n);
+	if (ret && ret != (void*)_s) {
+		ret = (void*)_MASK(ret);
+	}
+	return ret;
+
+#endif
+
+
+  typedef unsigned long int longword;
+  const unsigned char *char_ptr;
+  const longword *longword_ptr;
+  longword repeated_one;
+  longword repeated_c;
+  unsigned char c;
+
+  c = (unsigned char) c_in;
+
+  for (char_ptr = (const unsigned char *) s;
+       n > 0 && (size_t) char_ptr % sizeof (longword) != 0;
+       --n, ++char_ptr)
+    if (*char_ptr == c)
+      return GET_INTERIOR(char_ptr, _s);
+  longword_ptr = (const longword *) char_ptr;
+  repeated_one = 0x01010101;
+  repeated_c = c | (c << 8);
+  repeated_c |= repeated_c << 16;
+  if (0xffffffffU < (longword) -1)
+    {
+      repeated_one |= repeated_one << 31 << 1;
+      repeated_c |= repeated_c << 31 << 1;
+      if (8 < sizeof (longword))
+        {
+          size_t i;
+          for (i = 64; i < sizeof (longword) * 8; i *= 2)
+            {
+              repeated_one |= repeated_one << i;
+              repeated_c |= repeated_c << i;
+            }
+        }
+    }
+
+  while (n >= sizeof (longword))
+    {
+      longword longword1 = *longword_ptr ^ repeated_c;
+      if ((((longword1 - repeated_one) & ~longword1)
+           & (repeated_one << 7)) != 0)
+        break;
+      longword_ptr++;
+      n -= sizeof (longword);
+    }
+  char_ptr = (const unsigned char *) longword_ptr;
+
+  for (; n > 0; --n, ++char_ptr)
+    {
+      if (*char_ptr == c)
+      	return GET_INTERIOR(char_ptr, _s);
+    }
+  return NULL;
+}
+
+
+#if 0
+JEMALLOC_EXPORT
 void* je_memchr(const void *_s, int c, size_t n) {
 	const char *s = (const char*)UNMASK(_s);
 	size_t i;
@@ -3750,6 +3841,7 @@ void* je_memchr(const void *_s, int c, size_t n) {
   }
 	return NULL;
 }
+#endif
 
 JEMALLOC_EXPORT
 char *je_strrchr(const char *_s, int c) {

@@ -26,14 +26,12 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define _UNMASK(x) ((char*)((((uint64_t)(x)) & 0xffffffffffffULL)))
-
 /* Byte-wise swap two items of size SIZE. */
 #define SWAP(a, b, size)                                                      \
   do                                                                          \
     {                                                                         \
       register size_t __size = (size);                                        \
-      register char *__a = _UNMASK(a), *__b = _UNMASK(b);                                   \
+      register char *__a = UNMASK(a), *__b = UNMASK(b);                                   \
       do                                                                      \
         {                                                                     \
           char __tmp = *__a;                                                  \
@@ -88,14 +86,12 @@ typedef struct
       smaller partition.  This *guarantees* no more than log (total_elems)
       stack size is needed (actually O(1) in this case)!  */
 
-#define __MASK(x) ((char*)((((uint64_t)(x)) | (INTERIOR_STR << 48))))
-
 JEMALLOC_EXPORT
 void
 je_qsort (void *const pbase, size_t total_elems, size_t size,
             __compar_fn_t cmp)
 {
-  register char *base_ptr = (char *) __MASK(pbase);
+  register char *base_ptr = (char *) _MASK(pbase);
 
   const size_t max_thresh = MAX_THRESH * size;
 
@@ -240,10 +236,10 @@ je_qsort (void *const pbase, size_t total_elems, size_t size,
             char *trav;
 
             trav = run_ptr + size;
-						char *_tmp_ptr = _UNMASK(tmp_ptr);
+						char *_tmp_ptr = UNMASK(tmp_ptr);
             while (--trav >= run_ptr)
               {
-								char *_trav = _UNMASK(trav);
+								char *_trav = UNMASK(trav);
                 char c = *_trav;
                 char *hi, *lo;
 
