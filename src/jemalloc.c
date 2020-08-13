@@ -3781,6 +3781,63 @@ je_strtok(char *_s, const char *delim)
   return (s == _s) ? _s : _MASK(s);
 }
 
+
+JEMALLOC_EXPORT
+int je_execv(const char *path, char *const argv[]) {
+
+	char *targv[16];
+	int i = 0;
+
+	while (argv[i]) {
+		assert(i < 16);
+		char *val = UNMASK(argv[i]);
+		if (val == NULL) {
+			targv[i] = NULL;
+			break;
+		}
+		targv[i++] = val;
+	}
+	assert(i < 16);
+	targv[i] = NULL;
+
+
+	static int (*fptr)(const char *p, char *const a[]) = NULL;
+
+	if (fptr == NULL) {
+		fptr = get_func_addr("execv", je_execv);
+		assert(fptr);
+	}
+	return fptr(path, targv);
+}
+
+JEMALLOC_EXPORT
+int je_execvp(const char *file, char *const argv[]) {
+	
+	char *targv[16];
+	int i = 0;
+
+	while (argv[i]) {
+		assert(i < 16);
+		char *val = UNMASK(argv[i]);
+		if (val == NULL) {
+			targv[i] = NULL;
+			break;
+		}
+		targv[i++] = val;
+	}
+	assert(i < 16);
+	targv[i] = NULL;
+
+
+	static int (*fptr)(const char *p, char *const a[]) = NULL;
+
+	if (fptr == NULL) {
+		fptr = get_func_addr("execvp", je_execvp);
+		assert(fptr);
+	}
+	return fptr(file, targv);
+}
+
 #if 0
 JEMALLOC_EXPORT
 int
