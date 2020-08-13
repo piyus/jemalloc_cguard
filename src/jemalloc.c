@@ -2632,6 +2632,19 @@ _je_malloc(size_t size) {
 	return malloc_default(size);
 }
 
+JEMALLOC_EXPORT
+void debug_break()
+{}
+
+JEMALLOC_EXPORT
+void je_san_trace(char *name) {
+	static unsigned long long id = 0;
+	//malloc_printf("TR: %s:%lld\n", name, id++);
+	if (id == 211849) {
+		debug_break();
+	}
+}
+
 #define MAX_STACK_PTRS 102400
 static void *stack_ptrs[MAX_STACK_PTRS];
 static int num_stack_ptrs = 0;
@@ -3316,6 +3329,28 @@ int je_vfprintf(FILE *stream, const char *fmt, va_list ap)
 	return ret;
 }
 
+
+#if 0
+JEMALLOC_EXPORT
+int je___xstat64(int vers, const char *file, struct stat64 *buf)
+{
+	static int (*fptr)(int, const char*, struct stat64*) = NULL;
+
+	const char *path = getenv("PATH");
+		//malloc_printf("file:%s path:%s cur:%s\n", file, path, get_current_dir_name());
+	if (fptr == NULL) {
+		fptr = get_func_addr("__xstat64", je___xstat64);
+		assert(fptr);
+	}
+	int ret = fptr(vers, file, buf);
+	if (ret < 0) {
+		//perror("");
+		//assert(0);
+	}
+	return ret;
+}
+#endif
+
 JEMALLOC_EXPORT
 int je_vsnprintf(char *s, size_t n, const char *fmt, va_list ap)
 {
@@ -3632,29 +3667,11 @@ void je_san_abort2(void *base, void *cur, void *limit, void *ptrlimit, void *siz
 extern char** environ;
 
 JEMALLOC_EXPORT
-void* je_san_copy_argv(int argc, char **argv) {
-	je_stack_begin = (char*)&argc;
-	assert(argc >= 1);
-	int i;
-	int argv_size = (argc + 1) * sizeof(char*);
-	char **new_argv = (char**)je_malloc(argv_size);
-	assert(new_argv);
-	for (i = 0; i < argc; i++) {
-		char *arg = argv[i];
-		int len = strlen(arg);
-		char *new_arg = (char*)je_malloc(len+1);
-		assert(new_arg);
-		memcpy(new_arg, arg, len);
-		new_arg[len] = '\0';
-		new_argv[i] = new_arg;
-	}
-	new_argv[i] = NULL;
-	environ = new_argv;
-	return (void*)new_argv;
-}
-
-JEMALLOC_EXPORT
 void* je_san_copy_env(char **env) {
+	static void *env_var = NULL;
+	if (env_var ) {
+		return env_var;
+	}
 	int num_env = 0, i;
 	while (env[num_env] != NULL) {
 		num_env++;
@@ -3673,8 +3690,32 @@ void* je_san_copy_env(char **env) {
 		new_env[i] = new_e;
 	}
 	new_env[i] = NULL;
+	env_var = new_env;
 	return (void*)new_env;
 }
+
+JEMALLOC_EXPORT
+void* je_san_copy_argv(int argc, char **argv) {
+	je_stack_begin = (char*)&argc;
+	assert(argc >= 1);
+	int i;
+	int argv_size = (argc + 1) * sizeof(char*);
+	char **new_argv = (char**)je_malloc(argv_size);
+	assert(new_argv);
+	for (i = 0; i < argc; i++) {
+		char *arg = argv[i];
+		int len = strlen(arg);
+		char *new_arg = (char*)je_malloc(len+1);
+		assert(new_arg);
+		memcpy(new_arg, arg, len);
+		new_arg[len] = '\0';
+		new_argv[i] = new_arg;
+	}
+	new_argv[i] = NULL;
+	environ = (char**)je_san_copy_env(environ);
+	return (void*)new_argv;
+}
+
 
 JEMALLOC_EXPORT
 char *je_strstr(const char *_haystack, const char *_needle) {
@@ -3740,6 +3781,7 @@ je_strtok(char *_s, const char *delim)
   return (s == _s) ? _s : _MASK(s);
 }
 
+#if 0
 JEMALLOC_EXPORT
 int
 je_putenv(char *_name)
@@ -3747,11 +3789,14 @@ je_putenv(char *_name)
 	char *name = (char*)UNMASK(_name);
 	static int (*fptr)(char*) = NULL;
 
+	//malloc_printf("putenv:%s\n", name);
+
 	if (fptr == NULL) {
 		fptr = get_func_addr("putenv", je_putenv);
 	}
 	return fptr(name);
 }
+#endif
 
 #define GET_INTERIOR(x, y) ((x == NULL || ((void*)(x) == (void*)(y))) ? (void*)(x) : (void*)_MASK(x))
 
