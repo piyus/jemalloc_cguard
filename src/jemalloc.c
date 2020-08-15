@@ -2747,7 +2747,6 @@ static void* get_stack_ptr_base(void *ptr) {
 
 
 
-
 #define STACK_SIZE (8092 * 1024)
 
 struct obj_header fake_header = {MAGIC_NUMBER, 0, 0xfffffff};
@@ -3231,6 +3230,23 @@ static void restore_varg(unsigned long long **fixes, unsigned long long *vals, i
 		*(fixes[i]) = vals[i];
 	}
 }
+
+JEMALLOC_EXPORT
+int je_vsprintf(char *str, const char *format, va_list ap) {
+	unsigned long long *fixes[MAX_INTERIOR];
+	unsigned long long vals[MAX_INTERIOR];
+	int num_fixes = fix_varg_interiors(ap, fixes, vals);
+
+	static int (*fptr)(char*, const char*, va_list) = NULL;
+	if (fptr == NULL) {
+		fptr = get_func_addr("vsprintf", je_vsprintf);
+		assert(fptr);
+	}
+  int ret = fptr(str, format, ap);
+  restore_varg(fixes, vals, num_fixes);
+  return ret;
+}
+
 
 JEMALLOC_EXPORT
 int je_vasprintf(char **strp, const char *fmt, va_list ap)
