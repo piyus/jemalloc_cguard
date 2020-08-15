@@ -3878,13 +3878,20 @@ int je_execvp(const char *file, char *const argv[]) {
 	return fptr(file, targv);
 }
 
-#if 0
 JEMALLOC_EXPORT
 int
 je_putenv(char *_name)
 {
 	char *name = (char*)UNMASK(_name);
 	static int (*fptr)(char*) = NULL;
+	int i = 0;
+	char *val;
+
+	do {
+		val = UNMASK(environ[i]);
+		environ[i] = val;
+		i++;
+	} while (val);
 
 	//malloc_printf("putenv:%s\n", name);
 
@@ -3893,7 +3900,6 @@ je_putenv(char *_name)
 	}
 	return fptr(name);
 }
-#endif
 
 #define GET_INTERIOR(x, y) ((x == NULL || ((void*)(x) == (void*)(y))) ? (void*)(x) : (void*)_MASK(x))
 
