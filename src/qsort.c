@@ -89,9 +89,10 @@ typedef struct
 JEMALLOC_EXPORT
 void
 je_qsort (void *const pbase, size_t total_elems, size_t size,
-            __compar_fn_t cmp)
+            __compar_fn_t _cmp)
 {
   register char *base_ptr = (char *) _MASK(pbase);
+	__compar_fn_t cmp = (__compar_fn_t)UNMASK(_cmp);
 
   const size_t max_thresh = MAX_THRESH * size;
 

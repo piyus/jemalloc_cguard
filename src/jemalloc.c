@@ -84,18 +84,18 @@ extent_interior_deregister1(tsdn_t *tsdn, rtree_ctx_t *rtree_ctx,
 
 
 
-
+static int enable_masking = 0;
 static char *je_stack_begin = NULL;
 #define MAX_LARGE_PTRS 102400
 //static void *large_ptrs[MAX_LARGE_PTRS];
 //static int num_large_ptrs = 0;
 
 #define INTERIOR_STR1 0xcabaULL
-#define TRACK_STR 0 //0xcaba76ULL
-#define TRACK_SHIFT 40
+#define TRACK_STR 0 //0xcabaULL
+#define TRACK_SHIFT 48
 #define UNMASK(x) ((char*)((((uint64_t)(x)) & 0xffffffffffffULL)))
 //#define _MASK(x) (char*)(x) //((char*)((((uint64_t)(x)) | (INTERIOR_STR << 48))))
-#define _MASK(x) ((char*)((((uint64_t)(x)) | (INTERIOR_STR << 48))))
+#define _MASK(x) ((enable_masking) ? ((char*)((((uint64_t)(x)) | (INTERIOR_STR << 48)))) : (char*)(x))
 
 #include "qsort.c"
 
@@ -2633,15 +2633,27 @@ _je_malloc(size_t size) {
 }
 
 JEMALLOC_EXPORT
-void debug_break()
+void debug_break(void* v)
 {}
 
 JEMALLOC_EXPORT
-void je_san_trace(char *name) {
+void je_san_trace(char *_name, int type) {
+	return;
 	static unsigned long long id = 0;
-	//malloc_printf("TR: %s:%lld\n", name, id++);
-	if (id == 211849) {
-		debug_break();
+	char *name = UNMASK(_name);
+	//malloc_printf("name:%p\n", name);
+	if (type == 0) {
+		malloc_printf("TR: enter %s:%lld\n", name, id++);
+	}
+	else if (type == 1) {
+		//malloc_printf("TR: call %s:%lld\n", name, id++);
+	}
+	else {
+		assert(type == 2);
+		malloc_printf("TR: ret %s:%lld\n", name, id++);
+	}
+	if (id == 737402) {
+		debug_break(NULL);
 	}
 }
 
@@ -2694,7 +2706,7 @@ void je_san_record_stack_pointer(void *ptr) {
 	assert(ptr);
 	stack_ptrs[num_stack_ptrs] = ptr;
 	if (event_id > min_events) {
-		malloc_printf("recording:%p sz:%llx %d\n", ptr, *(((unsigned long long*)ptr) - 1), num_stack_ptrs);
+		malloc_printf("recording:%p %d\n", ptr, num_stack_ptrs);
 	}
 	num_stack_ptrs++;
 }
@@ -2859,7 +2871,7 @@ void je_san_icmp(unsigned long long val1, unsigned long long val2, int line, cha
 		name = (name < (char*)0x1000) ? null_name : name;
 		malloc_printf("%lld %lld icmp: val1:%llx val2:%llx %s():%d %d %d\n", 
 			event_id, min_events, val1, val2, name, (line & 0xffff), (line>>16), line);
-		assert(0);
+		//assert(0);
 	}
 }
 
@@ -2896,7 +2908,7 @@ void* je_san_page_fault_store(void *ptr, void *val, int line, char *name) {
 	void *optr = (void*)UNMASK(ptr);
 	//void *oval = (void*)UNMASK(val);
 	if (event_id > min_events || need_tracking((unsigned long long)val)/* || oval < (void*)0x80000000*/) {
-		name = (name < (char*)0x1000000000) ? null_name : UNMASK(name);
+		name = (name < (char*)0x1000) ? null_name : UNMASK(name);
 		malloc_printf("%lld store: ptr:%p val:%p %s(): %d %d %d\n", event_id, ptr, val, name, (line & 0xffff), (line>>16), line);
 	}
 #if 0
@@ -3696,6 +3708,7 @@ void* je_san_copy_env(char **env) {
 
 JEMALLOC_EXPORT
 void* je_san_copy_argv(int argc, char **argv) {
+	enable_masking = 1;
 	je_stack_begin = (char*)&argc;
 	assert(argc >= 1);
 	int i;
@@ -3786,7 +3799,7 @@ JEMALLOC_EXPORT
 int je_execv(const char *path, char *const argv[]) {
 
 	char *targv[16];
-	int i = 0;
+	int i = 0, j;
 
 	while (argv[i]) {
 		assert(i < 16);
@@ -3800,6 +3813,11 @@ int je_execv(const char *path, char *const argv[]) {
 	assert(i < 16);
 	targv[i] = NULL;
 
+	malloc_printf("exec: %s", path);
+	for (j = 0; j < i; j++) {
+		malloc_printf(" %s", targv[j]);
+	}
+	malloc_printf("\n");
 
 	static int (*fptr)(const char *p, char *const a[]) = NULL;
 
@@ -3814,7 +3832,7 @@ JEMALLOC_EXPORT
 int je_execvp(const char *file, char *const argv[]) {
 	
 	char *targv[16];
-	int i = 0;
+	int i = 0, j;
 
 	while (argv[i]) {
 		assert(i < 16);
@@ -3828,6 +3846,12 @@ int je_execvp(const char *file, char *const argv[]) {
 	assert(i < 16);
 	targv[i] = NULL;
 
+
+	malloc_printf("exec: %s", file);
+	for (j = 0; j < i; j++) {
+		malloc_printf(" %s", targv[j]);
+	}
+	malloc_printf("\n");
 
 	static int (*fptr)(const char *p, char *const a[]) = NULL;
 
