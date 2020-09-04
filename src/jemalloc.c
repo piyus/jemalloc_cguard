@@ -2636,23 +2636,61 @@ JEMALLOC_EXPORT
 void debug_break(void* v)
 {}
 
+#define ENTRY_TY 0
+#define EXIT_TY 1
+#define ICMP_TY 2
+#define LOAD_TY 3
+#define STORE_TY 4
+#define PTR_TO_INT_TY 5
+
 JEMALLOC_EXPORT
-void je_san_trace(char *_name, int type) {
-	return;
+void je_san_trace(char *_name, int line, int type, unsigned long long val1) {
 	static unsigned long long id = 0;
+	static FILE *fp = NULL;
+	static FILE *err_fp = NULL;
 	char *name = UNMASK(_name);
-	//malloc_printf("name:%p\n", name);
-	if (type == 0) {
-		malloc_printf("TR: enter %s:%lld\n", name, id++);
+	unsigned long long val = (val1 < 0xffff) ? val1 : 0;
+
+	if (fp == NULL) {
+		fp = fopen("trace.txt", "w");
+		assert(fp != NULL);
+		err_fp = fopen("error.txt", "w");
+		assert(err_fp != NULL);
 	}
-	else if (type == 1) {
-		//malloc_printf("TR: call %s:%lld\n", name, id++);
+
+	if (type == ENTRY_TY) {
+		fprintf(fp, "[%lld] enter: %s():%d\n", id, name, line);
+	}
+	else if (type == EXIT_TY) {
+		fprintf(fp, "[%lld] exit: %s():%d -> %llx\n", id, name, line, val);
+	}
+	else if (type == ICMP_TY) {
+		fprintf(fp, "[%lld] icmp: %d -> %llx\n", id, line, val);
+	}
+	else if (type == LOAD_TY) {
+		if ((val1 >> 48) == 0xcaba) {
+			fprintf(err_fp, "[%lld] ld: %s:%d -> %llx\n", id, name, line, val1);
+		}
+		fprintf(fp, "[%lld] load: %d -> %llx\n", id, line, val);
+	}
+	else if (type == STORE_TY) {
+		if ((val >> 48) == 0xcaba) {
+			fprintf(err_fp, "[%lld] st: %s:%d -> %llx\n", id, name, line, val1);
+		}
+		fprintf(fp, "[%lld] store: %d -> %llx\n", id, line, val);
+	}
+	else if (type == PTR_TO_INT_TY) {
+		if ((val1 >> 48) == 0xcaba) {
+			fprintf(err_fp, "[%lld] pi: %s:%d -> %llx\n", id, name, line, val1);
+		}
+		fprintf(fp, "[%lld] store: %d -> %llx\n", id, line, val);
 	}
 	else {
-		assert(type == 2);
-		malloc_printf("TR: ret %s:%lld\n", name, id++);
+	 assert(0);
 	}
-	if (id == 737402) {
+	id++;
+
+	if (id == 8238808) {
 		debug_break(NULL);
 	}
 }
@@ -3723,8 +3761,8 @@ void* je_san_copy_env(char **env) {
 }
 
 JEMALLOC_EXPORT
-void* je_san_copy_argv(int argc, char **argv) {
-	enable_masking = 1;
+void* je_san_copy_argv(int argc, char **argv, int enable_mask) {
+	enable_masking = enable_mask;
 	je_stack_begin = (char*)&argc;
 	assert(argc >= 1);
 	int i;
