@@ -2634,7 +2634,92 @@ _je_malloc(size_t size) {
 
 JEMALLOC_EXPORT
 void debug_break(void* v)
-{}
+{
+	asm volatile("int3");
+}
+
+#include <elf.h>
+#include <sys/stat.h>
+#define PATH_SZ 128
+
+static size_t
+getDataSecInfo(unsigned long long *Start, unsigned long long *End)
+{
+	char Exec[PATH_SZ];
+	static size_t DsecSz = 0;
+
+	if (DsecSz != 0)
+	{
+		return DsecSz;
+	}
+	DsecSz = -1;
+
+	ssize_t Count = readlink( "/proc/self/exe", Exec, PATH_SZ);
+
+	if (Count == -1) {
+		return -1;
+	}
+	Exec[Count] = '\0';
+
+	malloc_printf("Exec: %s\n", Exec);
+
+	int fd = open(Exec, O_RDONLY);
+	if (fd == -1) {
+		return -1;
+	}
+
+	struct stat Statbuf;
+	fstat(fd, &Statbuf);
+
+	char *Base = mmap(NULL, Statbuf.st_size, PROT_READ, MAP_SHARED, fd, 0);
+	if (Base == NULL) {
+		close(fd);
+		return -1;
+	}
+
+	Elf64_Ehdr *Header = (Elf64_Ehdr*)Base;
+
+	if (Header->e_ident[0] != 0x7f
+		|| Header->e_ident[1] != 'E'
+		|| Header->e_ident[2] != 'L'
+		|| Header->e_ident[3] != 'F')
+	{
+		goto out;
+	}
+
+	int i;
+	Elf64_Shdr *Shdr = (Elf64_Shdr*)(Base + Header->e_shoff);
+	char *Strtab = Base + Shdr[Header->e_shstrndx].sh_offset;
+
+	for (i = 0; i < Header->e_shnum; i++)
+	{
+		char *Name = Strtab + Shdr[i].sh_name;
+		if (!strncmp(Name, ".data", 6))
+		{
+			*Start = (unsigned long long)Shdr[i].sh_addr;
+			*End = (unsigned long long)Shdr[i].sh_addr + Shdr[i].sh_size;
+		}
+	}
+
+out:
+	munmap(Base, Statbuf.st_size);
+	close(fd);
+	return 0;
+}
+
+extern char  etext, edata, end;
+
+static bool is_global(unsigned long long val) {
+	static unsigned long long DataStart = 0;
+	static unsigned long long DataEnd = 0;
+
+	if (DataStart == 0) {
+		getDataSecInfo(&DataStart, &DataEnd);
+		assert(DataStart > 0 && DataEnd > 0);
+	}
+	//malloc_printf("DataStart: %llx DataEnd:%llx\n", DataStart, DataEnd);
+	return val >= DataStart && val < DataEnd;
+}
 
 #define ENTRY_TY 0
 #define EXIT_TY 1
@@ -2649,7 +2734,15 @@ void je_san_trace(char *_name, int line, int type, unsigned long long val1) {
 	static FILE *fp = NULL;
 	static FILE *err_fp = NULL;
 	char *name = UNMASK(_name);
-	unsigned long long val = (val1 < 0xffff) ? val1 : 0;
+	unsigned long long val2 = (unsigned long long)UNMASK(val1);
+	unsigned long long val;
+
+	if ((val2 >> 40) == 0x7f || is_global(val2)) {
+		val = 0;
+	}
+	else {
+		val = val2;
+	}
 
 	if (fp == NULL) {
 		fp = fopen("trace.txt", "w");
@@ -2665,7 +2758,7 @@ void je_san_trace(char *_name, int line, int type, unsigned long long val1) {
 		fprintf(fp, "[%lld] exit: %s():%d -> %llx\n", id, name, line, val);
 	}
 	else if (type == ICMP_TY) {
-		fprintf(fp, "[%lld] icmp: %d -> %llx\n", id, line, val);
+		fprintf(fp, "[%lld] icmp: %d -> %llx\n", id, line, val1);
 	}
 	else if (type == LOAD_TY) {
 		if ((val1 >> 48) == 0xcaba) {
@@ -2683,14 +2776,14 @@ void je_san_trace(char *_name, int line, int type, unsigned long long val1) {
 		if ((val1 >> 48) == 0xcaba) {
 			fprintf(err_fp, "[%lld] pi: %s:%d -> %llx\n", id, name, line, val1);
 		}
-		fprintf(fp, "[%lld] store: %d -> %llx\n", id, line, val);
+		fprintf(fp, "[%lld] pi: %d -> %llx\n", id, line, val);
 	}
 	else {
 	 assert(0);
 	}
 	id++;
 
-	if (id == 8238808) {
+	if (id >= 7099) {
 		debug_break(NULL);
 	}
 }
