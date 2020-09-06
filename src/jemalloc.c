@@ -2727,6 +2727,7 @@ static bool is_global(unsigned long long val) {
 #define LOAD_TY 3
 #define STORE_TY 4
 #define PTR_TO_INT_TY 5
+#define SUB_TY 6
 
 JEMALLOC_EXPORT
 void je_san_trace(char *_name, int line, int type, unsigned long long val1) {
@@ -2741,7 +2742,7 @@ void je_san_trace(char *_name, int line, int type, unsigned long long val1) {
 		val = 0;
 	}
 	else {
-		val = val2;
+		val = val2; // & 0xffff;
 	}
 
 	if (fp == NULL) {
@@ -2776,7 +2777,13 @@ void je_san_trace(char *_name, int line, int type, unsigned long long val1) {
 		if ((val1 >> 48) == 0xcaba) {
 			fprintf(err_fp, "[%lld] pi: %s:%d -> %llx\n", id, name, line, val1);
 		}
-		fprintf(fp, "[%lld] pi: %d -> %llx\n", id, line, val);
+		//fprintf(fp, "[%lld] pi: %d -> %llx\n", id, line, val);
+	}
+	else if (type == SUB_TY) {
+		if ((val1 >> 48) == 0xcaba) {
+			fprintf(err_fp, "[%lld] sub: %s:%d -> %llx\n", id, name, line, val1);
+		}
+		fprintf(fp, "[%lld] sub: %d -> %llx\n", id, line, val);
 	}
 	else {
 	 assert(0);
@@ -2784,7 +2791,7 @@ void je_san_trace(char *_name, int line, int type, unsigned long long val1) {
 	id++;
 
 	if (id >= 7099) {
-		debug_break(NULL);
+		//debug_break(NULL);
 	}
 }
 
