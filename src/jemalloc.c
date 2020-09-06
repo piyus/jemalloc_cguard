@@ -3860,9 +3860,14 @@ void* je_san_copy_env(char **env) {
 	return (void*)new_env;
 }
 
+
 JEMALLOC_EXPORT
-void* je_san_copy_argv(int argc, char **argv, int enable_mask) {
-	enable_masking = enable_mask;
+void je_san_enable_mask() {
+	enable_masking = 1;
+}
+
+JEMALLOC_EXPORT
+void* je_san_copy_argv(int argc, char **argv) {
 	je_stack_begin = (char*)&argc;
 	assert(argc >= 1);
 	int i;
