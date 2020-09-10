@@ -2707,6 +2707,83 @@ out:
 	return 0;
 }
 
+static int num_global_variables = 0;
+static int global_map_size = 0;
+static struct obj_header **global_objects;
+#define MAX_NEW_SLOTS 16
+
+static void add_global_object(struct obj_header *obj) {
+	if (num_global_variables == global_map_size) {
+		global_map_size += MAX_NEW_SLOTS;
+		struct obj_header **new_map =
+			(struct obj_header**)je_malloc(global_map_size * sizeof(struct obj_header*));
+		assert(new_map);
+		if (num_global_variables) {
+			memcpy(new_map, global_objects, sizeof(struct obj_header*) * num_global_variables);
+			free(global_objects);
+		}
+		global_objects = new_map;
+	}
+	global_objects[num_global_variables++] = obj;
+}
+
+static void initialize_globals() {
+	struct obj_header *start;
+	struct obj_header *end;
+	struct obj_header *header;
+	unsigned long long DataStart = 0;
+	unsigned long long DataEnd = 0;
+	size_t size;
+
+	getDataSecInfo(&DataStart, &DataEnd);
+	assert(DataStart != 0 && DataEnd != 0);
+	start = (struct obj_header*)DataStart;
+	end = (struct obj_header*)DataEnd;
+
+
+	for (header = start; header < end; ) {
+		if (header->magic == MAGIC_NUMBER) {
+			add_global_object(header);
+			size = (size_t)JE_ALIGN(header->size, 8);
+			header += size / sizeof(struct obj_header);
+			continue;
+		}
+		header++;
+	}
+}
+
+static void *get_global_header(char *ptr) {
+	int i;
+	struct obj_header *header = global_objects[num_global_variables-1];
+	for (i = 0; i < num_global_variables-1; i++) {
+		if (ptr >= (char*)global_objects[i] && ptr < (char*)global_objects[i+1]) {
+			header = global_objects[i];
+		}
+	}
+	if (ptr >= (char*)header && ptr < ((char*)header) + header->size) {
+		return header;
+	}
+	malloc_printf("unable to find base corresponding to ptr:%p\n", ptr);
+	assert(0);
+	return NULL;
+}
+
+#if 0
+static void print_data_section() {
+	unsigned long long DataStart = 0;
+	unsigned long long DataEnd = 0;
+	unsigned long long *start, *end;
+	getDataSecInfo(&DataStart, &DataEnd);
+	assert(DataStart != 0 && DataEnd != 0);
+	start = (unsigned long long*)DataStart;
+	end = (unsigned long long*)DataEnd;
+	malloc_printf("printing data section\n");
+	for (; start < end; start++) {
+		malloc_printf("%p -> %llx\n", start, *start);
+	}
+}
+#endif
+
 extern char  etext, edata, end;
 
 static bool is_global(unsigned long long val) {
@@ -2890,6 +2967,7 @@ static void* get_stack_ptr_base(void *ptr) {
 struct obj_header fake_header = {MAGIC_NUMBER, 0, 0xfffffff};
 struct obj_header fake_global_header = {MAGIC_NUMBER, 0, 0xfffffff};
 
+#if 0
 static void *get_global_header(unsigned *ptr) {
 	int iter = 0;
 	unsigned *base = ptr;
@@ -2903,6 +2981,7 @@ static void *get_global_header(unsigned *ptr) {
 	}
 	return ptr;
 }
+#endif
 
 static bool is_stack_ptr(char *ptr) {
 	if (!je_stack_begin) {
@@ -3868,6 +3947,8 @@ void je_san_enable_mask() {
 
 JEMALLOC_EXPORT
 void* je_san_copy_argv(int argc, char **argv) {
+	initialize_globals();
+	//print_data_section();
 	je_stack_begin = (char*)&argc;
 	assert(argc >= 1);
 	int i;
