@@ -2710,11 +2710,11 @@ out:
 static int num_global_variables = 0;
 static int global_map_size = 0;
 static struct obj_header **global_objects;
-#define MAX_NEW_SLOTS 16
+#define MIN_NEW_SLOTS 16
 
 static void add_global_object(struct obj_header *obj) {
 	if (num_global_variables == global_map_size) {
-		global_map_size += MAX_NEW_SLOTS;
+		global_map_size += (num_global_variables < MIN_NEW_SLOTS) ? MIN_NEW_SLOTS : num_global_variables;
 		struct obj_header **new_map =
 			(struct obj_header**)je_malloc(global_map_size * sizeof(struct obj_header*));
 		assert(new_map);
@@ -2727,30 +2727,77 @@ static void add_global_object(struct obj_header *obj) {
 	global_objects[num_global_variables++] = obj;
 }
 
-static void initialize_globals() {
-	struct obj_header *start;
-	struct obj_header *end;
+static void initialize_globals(struct obj_header *start, struct obj_header *end) {
 	struct obj_header *header;
-	unsigned long long DataStart = 0;
-	unsigned long long DataEnd = 0;
-	size_t size;
-
-	getDataSecInfo(&DataStart, &DataEnd);
-	assert(DataStart != 0 && DataEnd != 0);
-	start = (struct obj_header*)DataStart;
-	end = (struct obj_header*)DataEnd;
-
 
 	for (header = start; header < end; ) {
 		if (header->magic == MAGIC_NUMBER) {
 			add_global_object(header);
-			size = (size_t)JE_ALIGN(header->size, 8);
-			header += size / sizeof(struct obj_header);
+			header = (struct obj_header*)(((char*)header) + header->size + OBJ_HEADER_SIZE);
 			continue;
 		}
-		header++;
+		header = (struct obj_header*)(((char*)header)+1);
 	}
 }
+
+static void
+initialize_sections()
+{
+	char Exec[PATH_SZ];
+	ssize_t Count = readlink( "/proc/self/exe", Exec, PATH_SZ);
+
+	if (Count == -1) {
+		return;
+	}
+	Exec[Count] = '\0';
+
+	int fd = open(Exec, O_RDONLY);
+	if (fd == -1) {
+		return;
+	}
+
+	struct stat Statbuf;
+	fstat(fd, &Statbuf);
+
+	char *Base = mmap(NULL, Statbuf.st_size, PROT_READ, MAP_SHARED, fd, 0);
+	if (Base == NULL) {
+		close(fd);
+		return;
+	}
+
+	Elf64_Ehdr *Header = (Elf64_Ehdr*)Base;
+
+	if (Header->e_ident[0] != 0x7f
+		|| Header->e_ident[1] != 'E'
+		|| Header->e_ident[2] != 'L'
+		|| Header->e_ident[3] != 'F')
+	{
+		goto out;
+	}
+
+	int i;
+	Elf64_Shdr *Shdr = (Elf64_Shdr*)(Base + Header->e_shoff);
+	char *Strtab = Base + Shdr[Header->e_shstrndx].sh_offset;
+
+	for (i = 0; i < Header->e_shnum; i++)
+	{
+		char *Name = Strtab + Shdr[i].sh_name;
+		if (strncmp(Name, ".text", 6))
+		{
+			struct obj_header *start, *end;
+			start = (struct obj_header*)Shdr[i].sh_addr;
+			end = (struct obj_header*)(Shdr[i].sh_addr + Shdr[i].sh_size);
+			if (start) {
+				initialize_globals(start, end);
+			}
+		}
+	}
+
+out:
+	munmap(Base, Statbuf.st_size);
+	close(fd);
+}
+
 
 static void *get_global_header(char *ptr) {
 	int i;
@@ -2760,11 +2807,10 @@ static void *get_global_header(char *ptr) {
 			header = global_objects[i];
 		}
 	}
-	if (ptr >= (char*)header && ptr < ((char*)header) + header->size) {
+	if (ptr >= (char*)header && ptr < ((char*)header) + header->size + OBJ_HEADER_SIZE) {
 		return header;
 	}
 	malloc_printf("unable to find base corresponding to ptr:%p\n", ptr);
-	assert(0);
 	return NULL;
 }
 
@@ -2967,8 +3013,7 @@ static void* get_stack_ptr_base(void *ptr) {
 struct obj_header fake_header = {MAGIC_NUMBER, 0, 0xfffffff};
 struct obj_header fake_global_header = {MAGIC_NUMBER, 0, 0xfffffff};
 
-#if 0
-static void *get_global_header(unsigned *ptr) {
+static void *get_global_header1(unsigned *ptr) {
 	int iter = 0;
 	unsigned *base = ptr;
 	while (!IS_MAGIC(ptr[0]) && iter++ < 10000000) {
@@ -2979,9 +3024,9 @@ static void *get_global_header(unsigned *ptr) {
 		assert(0);
 		return NULL;
 	}
+	malloc_printf("base:%p ptr:%p val:%llx\n", ptr, base, *(unsigned long long*)ptr);
 	return ptr;
 }
-#endif
 
 static bool is_stack_ptr(char *ptr) {
 	if (!je_stack_begin) {
@@ -2997,7 +3042,12 @@ static bool is_stack_ptr(char *ptr) {
 
 static void *_je_san_get_base(void *ptr) {
 	if (ptr < (void*)0x80000000) {
-		return get_global_header(ptr);
+		void *ret = get_global_header(ptr);
+		if (ret == NULL) {
+			ret = get_global_header1(ptr);
+			assert(0);
+		}
+		return ret;
 	}
 	if (is_stack_ptr(ptr)) {
 		unsigned *ret = get_stack_ptr_base(ptr);
@@ -3947,7 +3997,8 @@ void je_san_enable_mask() {
 
 JEMALLOC_EXPORT
 void* je_san_copy_argv(int argc, char **argv) {
-	initialize_globals();
+	enable_masking = 1;
+	initialize_sections();
 	//print_data_section();
 	je_stack_begin = (char*)&argc;
 	assert(argc >= 1);
