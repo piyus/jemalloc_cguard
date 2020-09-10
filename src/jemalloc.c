@@ -90,7 +90,7 @@ static char *je_stack_begin = NULL;
 //static void *large_ptrs[MAX_LARGE_PTRS];
 //static int num_large_ptrs = 0;
 
-#define INTERIOR_STR1 0xcabaULL
+#define INTERIOR_STR1 0xcaba7fULL
 #define TRACK_STR 0 //0xcabaULL
 #define TRACK_SHIFT 48
 #define UNMASK(x) ((char*)((((uint64_t)(x)) & 0xffffffffffffULL)))
@@ -3133,7 +3133,7 @@ void je_san_icmp(unsigned long long val1, unsigned long long val2, int line, cha
 	if (val1 == (unsigned long long)-1 || val2 == (unsigned long long)-1) {
 		return;
 	}
-	if ((val1 >> 48) == INTERIOR_STR || (val2 >> 48) == INTERIOR_STR) {
+	if ((val1 >> 48) == INTERIOR_STR1 || (val2 >> 48) == INTERIOR_STR1) {
 		name = (name < (char*)0x1000) ? null_name : name;
 		malloc_printf("%lld %lld icmp: val1:%llx val2:%llx %s():%d %d %d\n", 
 			event_id, min_events, val1, val2, name, (line & 0xffff), (line>>16), line);
