@@ -2725,12 +2725,14 @@ static void add_global_object(struct obj_header *obj) {
 		global_objects = new_map;
 	}
 	global_objects[num_global_variables++] = obj;
+	//malloc_printf("adding:%p %d %x\n", obj, obj->size, obj->magic);
 }
 
 static void initialize_globals(struct obj_header *start, struct obj_header *end) {
 	struct obj_header *header;
-
+	//malloc_printf("START:%p END:%p\n", start, end);
 	for (header = start; header < end; ) {
+		//malloc_printf("walking header:%p\n", header);
 		if (header->magic == MAGIC_NUMBER) {
 			add_global_object(header);
 			header = (struct obj_header*)(((char*)header) + header->size + OBJ_HEADER_SIZE);
