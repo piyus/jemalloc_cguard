@@ -2800,8 +2800,49 @@ out:
 	close(fd);
 }
 
+static struct obj_header* find_smaller_or_equal(struct obj_header *e) {
+
+	int lo = 0;
+	int hi = num_global_variables - 1;
+	struct obj_header *v;
+
+  do {
+    int mid = (lo + hi) / 2;
+		v = global_objects[mid];
+
+    if (v == e) {
+      return e;
+    }
+    else if (e < v) {
+      hi = mid - 1;
+    }
+    else {
+      lo = mid + 1;
+    }
+  }
+  while (lo <= hi);
+
+	if (v < e) {
+		return v;
+	}
+	else if (hi > 0) {
+		v = global_objects[hi];
+		if (v < e) {
+			return v;
+		}
+	}
+	return NULL;
+}
+
 
 static void *get_global_header(char *ptr) {
+	struct obj_header *ret = find_smaller_or_equal((struct obj_header*)ptr);
+	if (ret && ptr < ((char*)ret) + ret->size + OBJ_HEADER_SIZE) {
+		return ret;
+	}
+	malloc_printf("unable to find base corresponding to ptr:%p\n", ptr);
+	return NULL;
+#if 0
 	int i;
 	struct obj_header *header = global_objects[num_global_variables-1];
 	for (i = 0; i < num_global_variables-1; i++) {
@@ -2812,8 +2853,7 @@ static void *get_global_header(char *ptr) {
 	if (ptr >= (char*)header && ptr < ((char*)header) + header->size + OBJ_HEADER_SIZE) {
 		return header;
 	}
-	malloc_printf("unable to find base corresponding to ptr:%p\n", ptr);
-	return NULL;
+#endif
 }
 
 #if 0
