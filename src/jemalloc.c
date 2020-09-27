@@ -39,6 +39,18 @@ struct obj_header {
 	unsigned size;
 };
 
+static FILE *trace_fp = NULL;
+
+static void abort3()
+{
+	if (trace_fp) {
+		fprintf(trace_fp, "exitting\n");
+		syncfs(fileno(trace_fp));
+		fclose(trace_fp);
+	}
+	assert(0);
+}
+
 #ifndef NO_SAFETY
 #define OBJ_HEADER_SIZE (sizeof(struct obj_header))
 #else
@@ -216,8 +228,14 @@ static void *make_obj_header(void *ptr, size_t size, unsigned short offset) {
 	}
 
 	if (event_id > min_events) {
-		malloc_printf("mal ptr:%p sz:%zd offset:%d\n", ptr, size, (int)offset);
+		static int entry = 0;
+		entry++;
+		if (trace_fp && entry == 1) {
+			fprintf(trace_fp, "mal ptr:%p sz:%zd offset:%d\n", ptr, size, (int)offset);
+		}
+		entry--;
 	}
+	event_id++;
 	struct obj_header *header = (struct obj_header*)ptr;
 	header->magic = MAGIC_NUMBER;
 	header->offset = offset;
@@ -2894,10 +2912,15 @@ static bool is_global(unsigned long long val) {
 #define PTR_TO_INT_TY 5
 #define SUB_TY 6
 
+
 JEMALLOC_EXPORT
 void je_san_trace(char *_name, int line, int type, unsigned long long val1) {
+	event_id++;
+	if (event_id < min_events) {
+		return;
+	}
+
 	static unsigned long long id = 0;
-	static FILE *fp = NULL;
 	static FILE *err_fp = NULL;
 	char *name = UNMASK(_name);
 	unsigned long long val2 = (unsigned long long)UNMASK(val1);
@@ -2910,48 +2933,59 @@ void je_san_trace(char *_name, int line, int type, unsigned long long val1) {
 		val = val2; // & 0xffff;
 	}
 
-	if (fp == NULL) {
-		fp = fopen("trace.txt", "w");
-		assert(fp != NULL);
+	if ((val2 >> 40)) {
+		val = val1;
+	}
+	else {
+	  val = 0;
+	}
+
+	if (trace_fp == NULL) {
+		trace_fp = fopen("trace.txt", "w");
+		assert(trace_fp != NULL);
 		err_fp = fopen("error.txt", "w");
 		assert(err_fp != NULL);
 	}
 
 	if (type == ENTRY_TY) {
-		fprintf(fp, "[%lld] enter: %s():%d\n", id, name, line);
+		fprintf(trace_fp, "[%lld] enter: %s():%d\n", id, name, line);
 	}
 	else if (type == EXIT_TY) {
-		fprintf(fp, "[%lld] exit: %s():%d -> %llx\n", id, name, line, val);
+		fprintf(trace_fp, "[%lld] exit: %s():%d -> %llx\n", id, name, line, val);
 	}
 	else if (type == ICMP_TY) {
-		fprintf(fp, "[%lld] icmp: %d -> %llx\n", id, line, val1);
+		//fprintf(trace_fp, "[%lld] icmp: %d -> %llx\n", id, line, val1);
 	}
 	else if (type == LOAD_TY) {
-		if ((val1 >> 48) == 0xcaba) {
-			fprintf(err_fp, "[%lld] ld: %s:%d -> %llx\n", id, name, line, val1);
+		//if ((val1 >> 48) == 0xcaba) {
+			//fprintf(err_fp, "[%lld] ld: %s:%d -> %llx\n", id, name, line, val1);
+		//}
+		if (val) {
+			fprintf(trace_fp, "[%lld] load: %d -> %llx\n", id, line, val);
 		}
-		fprintf(fp, "[%lld] load: %d -> %llx\n", id, line, val);
 	}
 	else if (type == STORE_TY) {
-		if ((val >> 48) == 0xcaba) {
-			fprintf(err_fp, "[%lld] st: %s:%d -> %llx\n", id, name, line, val1);
+		//if ((val >> 48) == 0xcaba) {
+			//fprintf(err_fp, "[%lld] st: %s:%d -> %llx\n", id, name, line, val1);
+		//}
+		if (val) {
+			fprintf(trace_fp, "[%lld] store: %d -> %llx\n", id, line, val);
 		}
-		fprintf(fp, "[%lld] store: %d -> %llx\n", id, line, val);
 	}
 	else if (type == PTR_TO_INT_TY) {
-		if ((val1 >> 48) == 0xcaba) {
-			fprintf(err_fp, "[%lld] pi: %s:%d -> %llx\n", id, name, line, val1);
-		}
-		//fprintf(fp, "[%lld] pi: %d -> %llx\n", id, line, val);
+		//if ((val1 >> 48) == 0xcaba) {
+			//fprintf(err_fp, "[%lld] pi: %s:%d -> %llx\n", id, name, line, val1);
+		//}
+		//fprintf(trace_fp, "[%lld] pi: %d -> %llx\n", id, line, val);
 	}
 	else if (type == SUB_TY) {
-		if ((val1 >> 48) == 0xcaba) {
-			fprintf(err_fp, "[%lld] sub: %s:%d -> %llx\n", id, name, line, val1);
-		}
-		fprintf(fp, "[%lld] sub: %d -> %llx\n", id, line, val);
+		//if ((val1 >> 48) == 0xcaba) {
+			//fprintf(err_fp, "[%lld] sub: %s:%d -> %llx\n", id, name, line, val1);
+		//}
+		//fprintf(trace_fp, "[%lld] sub: %d -> %llx\n", id, line, val);
 	}
 	else {
-	 assert(0);
+		abort3();
 	}
 	id++;
 
@@ -2959,6 +2993,7 @@ void je_san_trace(char *_name, int line, int type, unsigned long long val1) {
 		//debug_break(NULL);
 	}
 }
+
 
 #define MAX_STACK_PTRS 102400
 static void *stack_ptrs[MAX_STACK_PTRS];
@@ -2970,7 +3005,7 @@ JEMALLOC_EXPORT
 void* je_san_enter_scope() {
 	callstack[num_callstack++] = (void*)&stack_ptrs[num_stack_ptrs];
 	if (event_id > min_events) {
-		malloc_printf("enter_scope %d %p\n", num_stack_ptrs, &stack_ptrs[num_stack_ptrs]);
+		//malloc_printf("enter_scope %d %p\n", num_stack_ptrs, &stack_ptrs[num_stack_ptrs]);
 	}
 	return &stack_ptrs[num_stack_ptrs];
 }
@@ -2980,7 +3015,7 @@ void je_san_exit_scope(char *ptr) {
 	num_callstack--;
 	num_stack_ptrs = (ptr - (char*)&stack_ptrs[0]) / sizeof(void*);
 	if (event_id > min_events) {
-		malloc_printf("exit_scope :%d %p\n", num_stack_ptrs, ptr);
+		//malloc_printf("exit_scope :%d %p\n", num_stack_ptrs, ptr);
 	}
 	assert(callstack[num_callstack] == (void*)ptr);
 }
@@ -3009,8 +3044,15 @@ void je_san_record_stack_pointer(void *ptr) {
 	assert(ptr);
 	stack_ptrs[num_stack_ptrs] = ptr;
 	if (event_id > min_events) {
-		malloc_printf("recording:%p %d\n", ptr, num_stack_ptrs);
+		if (trace_fp) {
+			fprintf(trace_fp, "%lld recording:%p %d\n", event_id, ptr, num_stack_ptrs);
+		}
+		else {
+			malloc_printf("recording:%p %d\n", ptr, num_stack_ptrs);
+		}
 	}
+
+
 	num_stack_ptrs++;
 }
 
@@ -3098,7 +3140,7 @@ static void *_je_san_get_base(void *ptr) {
 		}
 		else {
 			malloc_printf("unable to find base corresponding to : %p\n", ptr);
-			assert(0);
+			//assert(0);
 			return NULL;
 		}
 	}
@@ -3189,9 +3231,15 @@ void* je_san_page_fault_load(void *ptr, int line, char *name) {
 	//malloc_printf("1. store: ptr:%p val:%p\n", ptr, val);
 	void *optr = (void*)UNMASK(ptr);
 	if (event_id > min_events || need_tracking(*((unsigned long long*)optr))) {
-		name = (name < (char*)0x1000) ? null_name : name;
-		malloc_printf("%lld load: ptr:%p val:%p %s():%d %d %d\n", 
-			event_id, ptr, *((char**)optr), name, (line & 0xffff), (line>>16), line);
+		name = (name < (char*)0x1000) ? null_name : UNMASK(name);
+		if (trace_fp) {
+			fprintf(trace_fp, "%lld load: ptr:%p val:%p %s():%d %d %d\n", 
+				event_id, ptr, *((char**)optr), name, (line & 0xffff), (line>>16), line);
+		}
+		else {
+			malloc_printf("%lld load: ptr:%p val:%p %s():%d %d %d\n", 
+				event_id, ptr, *((char**)optr), name, (line & 0xffff), (line>>16), line);
+		}
 	}
 #if 0
 	void *oval = (void*)(((unsigned long long)val) & 0x7fffffffffffffffULL);
@@ -3217,7 +3265,12 @@ void* je_san_page_fault_store(void *ptr, void *val, int line, char *name) {
 	//void *oval = (void*)UNMASK(val);
 	if (event_id > min_events || need_tracking((unsigned long long)val)/* || oval < (void*)0x80000000*/) {
 		name = (name < (char*)0x1000) ? null_name : UNMASK(name);
-		malloc_printf("%lld store: ptr:%p val:%p %s(): %d %d %d\n", event_id, ptr, val, name, (line & 0xffff), (line>>16), line);
+		if (trace_fp) {
+			fprintf(trace_fp, "%lld store: ptr:%p val:%p %d %d %d\n", event_id, ptr, val, (line & 0xffff), (line>>16), line);
+		}
+		else {
+			malloc_printf("%lld store: ptr:%p val:%p %d %d %d\n", event_id, ptr, val, (line & 0xffff), (line>>16), line);
+		}
 	}
 #if 0
 	void *oval = (void*)(((unsigned long long)val) & 0x7fffffffffffffffULL);
@@ -3310,14 +3363,20 @@ void* je_san_page_fault_len(void *ptr, int line, char *name) {
 	event_id++;
 	unsigned *optr = (unsigned*)UNMASK(ptr);
 	if (event_id > min_events) {
-		name = (name < (char*)0x1000) ? null_name : name;
-		malloc_printf("%lld len: ptr:%p %s():%d %d %d\n", event_id, ptr, name, (line & 0xffff), (line>>16), line);
+		//name = (name < (char*)0x1000) ? null_name : name;
+		//malloc_printf("%lld len: ptr:%p %s():%d %d %d\n", event_id, ptr, name, (line & 0xffff), (line>>16), line);
 	}
 	unsigned magic = *(optr-1);
 	unsigned *head;
 	//malloc_printf("magic:%x size:%x\n", magic, optr[0]);
 	if (!IS_MAGIC(magic) || ptr != optr) {
 		head = _je_san_get_base(optr);
+		if (head == NULL) {
+			if (trace_fp) {
+				fprintf(trace_fp, "%lld ptr:%p head:%p line:%d\n", event_id, optr, head, line);
+			}
+			abort3();
+		}
 
 		if (!IS_MAGIC(head[0])) {
 			malloc_printf("optr:%p head:%p\n", optr, head);
@@ -3327,6 +3386,7 @@ void* je_san_page_fault_len(void *ptr, int line, char *name) {
 			if (ptr == optr) {
 				print_all_obstack();
 				malloc_printf("%lld ptr:%p head:%p line:%d\n", event_id, optr, head, line);
+				je_san_trace("get_length", 0, 10, 0);
 			}
 			assert(ptr != (void*)optr);
 		//}
