@@ -31,7 +31,7 @@
 #define JE_ALIGN(x, y) (char*)(((size_t)(x) + ALIGN_PAD(y)) & ALIGN_MASK(y))
 
 static unsigned long long event_id = 1;
-static unsigned long long min_events = 0xffff4800000000ULL;
+static unsigned long long min_events = 15592504927ULL; //0xffff4800000000ULL;
 
 struct obj_header {
 	unsigned short magic;
@@ -2679,7 +2679,7 @@ getDataSecInfo(unsigned long long *Start, unsigned long long *End)
 	}
 	Exec[Count] = '\0';
 
-	malloc_printf("Exec: %s\n", Exec);
+	//malloc_printf("Exec: %s\n", Exec);
 
 	int fd = open(Exec, O_RDONLY);
 	if (fd == -1) {
@@ -4053,12 +4053,20 @@ void je_san_abort2(void *base, void *cur, void *limit, void *ptrlimit, void *siz
 	unsigned len = *((unsigned*)_base - 1);
 	unsigned magic = *((unsigned*)_base -2);
 	char *end = (char*)_base + len;
-	malloc_printf("%lld base:%p cur:%p len:%d magic:%x end:%p\n"
-								"limit:%p ptrlimit:%p size:%p callsite:%p\n",
-								event_id, base, cur, len, magic, end, limit, ptrlimit, size, callsite);
-	malloc_printf("head:%p head0:%x head1:%x\n", head, head[0], head[1]);
-	myfunc3();
-	abort();
+	if (trace_fp) {
+		fprintf(trace_fp, "%lld base:%p cur:%p len:%d magic:%x end:%p\n"
+						          "limit:%p ptrlimit:%p size:%p callsite:%p\n",
+						          event_id, base, cur, len, magic, end, limit, ptrlimit, size, callsite);
+		fprintf(trace_fp, "head:%p head0:%x head1:%x\n", head, head[0], head[1]);
+	}
+	else {
+		malloc_printf("%lld base:%p cur:%p len:%d magic:%x end:%p\n"
+									"limit:%p ptrlimit:%p size:%p callsite:%p\n",
+									event_id, base, cur, len, magic, end, limit, ptrlimit, size, callsite);
+		malloc_printf("head:%p head0:%x head1:%x\n", head, head[0], head[1]);
+		myfunc3();
+	}
+	abort3();
 }
 
 extern char** environ;
