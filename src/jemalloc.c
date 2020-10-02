@@ -31,7 +31,8 @@
 #define JE_ALIGN(x, y) (char*)(((size_t)(x) + ALIGN_PAD(y)) & ALIGN_MASK(y))
 
 static unsigned long long event_id = 1;
-static unsigned long long min_events = 15592504927ULL; //0xffff4800000000ULL;
+//static unsigned long long min_events = 15592504927ULL; //0xffff4800000000ULL;
+static unsigned long long min_events = 0xffff4800000000ULL;
 
 struct obj_header {
 	unsigned short magic;
@@ -4143,6 +4144,89 @@ char *je_strstr(const char *_haystack, const char *_needle) {
       return (pos == 0) ? (char*)_haystack : (char*)_MASK((haystack + pos));
   }
   return NULL;
+}
+
+
+#ifndef ULONG_MAX
+#define	ULONG_MAX	((unsigned long)(~0L))		/* 0xFFFFFFFF */
+#endif
+
+JEMALLOC_EXPORT
+unsigned long
+je_strtoul(const char *_nptr, char **_endptr, int base) {
+	unsigned long ret;
+	const char *nptr = (const char*)UNMASK(_nptr);
+	char **endptr = (char**)UNMASK(_endptr);
+
+	static unsigned long (*fptr)(const char*, char**, int) = NULL;
+	if (fptr == NULL) {
+		fptr = get_func_addr("strtoul", je_strtoul);
+	}
+	ret = fptr(nptr, endptr, base);
+	if (*endptr == nptr) {
+		*endptr = (char*)_nptr;
+	}
+	else {
+		*endptr = _MASK(*endptr);
+	}
+	return ret;
+
+#if 0
+
+	register const char *s = (const char*)UNMASK(_nptr);
+	register unsigned long acc;
+	register int c;
+	register unsigned long cutoff;
+	register int neg = 0, any, cutlim;
+
+	/*
+	 * See strtol for comments as to the logic used.
+	 */
+	do {
+		c = *s++;
+	} while (isspace(c));
+	if (c == '-') {
+		neg = 1;
+		c = *s++;
+	} else if (c == '+')
+		c = *s++;
+	if ((base == 0 || base == 16) &&
+	    c == '0' && (*s == 'x' || *s == 'X')) {
+		c = s[1];
+		s += 2;
+		base = 16;
+	}
+	if (base == 0)
+		base = c == '0' ? 8 : 10;
+	cutoff = (unsigned long)ULONG_MAX / (unsigned long)base;
+	cutlim = (unsigned long)ULONG_MAX % (unsigned long)base;
+	for (acc = 0, any = 0;; c = *s++) {
+		if (isdigit(c))
+			c -= '0';
+		else if (isalpha(c))
+			c -= isupper(c) ? 'A' - 10 : 'a' - 10;
+		else
+			break;
+		if (c >= base)
+			break;
+		if (any < 0 || acc > cutoff || (acc == cutoff && c > cutlim))
+			any = -1;
+		else {
+			any = 1;
+			acc *= base;
+			acc += c;
+		}
+	}
+	if (any < 0) {
+		acc = ULONG_MAX;
+		errno = ERANGE;
+	} else if (neg)
+		acc = -acc;
+	if (endptr != 0) {
+		*endptr = (char *) (any ? _MASK(s - 1) : _nptr);
+	}
+	return (acc);
+#endif
 }
 
 JEMALLOC_EXPORT
