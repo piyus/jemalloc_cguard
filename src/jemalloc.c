@@ -3182,14 +3182,15 @@ je_malloc(size_t size) {
 
 JEMALLOC_EXPORT
 void* je_san_get_base(void *ptr) {
-	return _je_san_get_base(ptr);
+	struct obj_header *h = _je_san_get_base(ptr);
+	return h+1;
 }
 
 JEMALLOC_EXPORT
 char* je_san_make_interior(char *ptr) {
 	char* optr = UNMASK(ptr);
 	assert(optr != ptr);
-	char *base = (char*)je_san_get_base(ptr);
+	char *base = (char*)_je_san_get_base(ptr);
 	if (base != ptr) {
 		return _MASK(ptr);
 	}
@@ -4037,11 +4038,20 @@ void je_san_abort2(void *base, void *cur, void *limit, void *ptrlimit, void *siz
 		char *_cur = (void*)UNMASK(cur);
 		char *orig_base;
 		if (_cur < (char*)0x8000000) {
-			orig_base = je_san_get_base(_cur);
-			assert(orig_base + *((unsigned*)(orig_base-4)) >= _base);
+			orig_base = _je_san_get_base(_cur);
+			if (!(orig_base + *((unsigned*)(orig_base+4)) >= _base)) {
+				malloc_printf("orig_base:%p base:%p _base:%p _cur:%p cur:%p\n", orig_base, base, _base, _cur, cur);
+				if (orig_base != _base) {
+					assert(base != _base);
+				}
+			}
+			assert(orig_base + *((unsigned*)(orig_base+4)) >= _base);
 		}
 		else {
-			orig_base = je_san_get_base(_base);
+			orig_base = _je_san_get_base(_base);
+			if (orig_base != _base) {
+				assert(base != _base);
+			}
 		}
 		if (orig_base && _cur >= orig_base) {
 			return;
