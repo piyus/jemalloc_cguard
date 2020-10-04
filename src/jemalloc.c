@@ -31,7 +31,7 @@
 #define JE_ALIGN(x, y) (char*)(((size_t)(x) + ALIGN_PAD(y)) & ALIGN_MASK(y))
 
 static unsigned long long event_id = 1;
-//static unsigned long long min_events = 15592504927ULL; //0xffff4800000000ULL;
+//static unsigned long long min_events = 0ULL; //0xffff4800000000ULL;
 static unsigned long long min_events = 0xffff4800000000ULL;
 
 struct obj_header {
@@ -3034,7 +3034,12 @@ void je_san_restore_scope(char *ptr) {
 		num_stack_ptrs--;
 	}
 	if (event_id > min_events) {
-		malloc_printf("restore_scope :%d %p\n", num_stack_ptrs, ptr);
+		if (trace_fp) {
+			fprintf(trace_fp, "restore_scope :%d %p\n", num_stack_ptrs, ptr);
+		}
+		else {
+			malloc_printf("restore_scope :%d %p\n", num_stack_ptrs, ptr);
+		}
 	}
 }
 
@@ -3182,7 +3187,13 @@ je_malloc(size_t size) {
 
 JEMALLOC_EXPORT
 void* je_san_get_base(void *ptr) {
+	void *ptr1 = UNMASK(ptr);
+	static long long int counter = 0;
 	struct obj_header *h = _je_san_get_base(ptr);
+	if (ptr1 == (void*)(h+1)) {
+		counter++;
+		malloc_printf("%lld ptr:%p ptr1:%p h:%p\n", counter, ptr, ptr1, h+1);
+	}
 	return h+1;
 }
 
