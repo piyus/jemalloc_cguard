@@ -31,7 +31,7 @@
 #define JE_ALIGN(x, y) (char*)(((size_t)(x) + ALIGN_PAD(y)) & ALIGN_MASK(y))
 
 static unsigned long long event_id = 1;
-//static unsigned long long min_events = 0ULL; //0xffff4800000000ULL;
+//static unsigned long long min_events = 8600857659ULL; //0xffff4800000000ULL;
 static unsigned long long min_events = 0xffff4800000000ULL;
 
 struct obj_header {
@@ -3189,10 +3189,14 @@ JEMALLOC_EXPORT
 void* je_san_get_base(void *ptr) {
 	void *ptr1 = UNMASK(ptr);
 	static long long int counter = 0;
-	struct obj_header *h = _je_san_get_base(ptr);
+	struct obj_header *h = _je_san_get_base(ptr1);
+	//malloc_printf("%lld ptr:%p ptr1:%p h:%p sz:%d\n", counter, ptr, ptr1, h+1, h->size);
+	if (ptr != ptr1) {
+		h = (struct obj_header*)_MASK(h);
+	}
 	if (ptr1 == (void*)(h+1)) {
 		counter++;
-		malloc_printf("%lld ptr:%p ptr1:%p h:%p\n", counter, ptr, ptr1, h+1);
+		//malloc_printf("%lld ptr:%p ptr1:%p h:%p\n", counter, ptr, ptr1, h+1);
 	}
 	return h+1;
 }
