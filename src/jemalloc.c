@@ -31,7 +31,7 @@
 #define JE_ALIGN(x, y) (char*)(((size_t)(x) + ALIGN_PAD(y)) & ALIGN_MASK(y))
 
 static unsigned long long event_id = 1;
-//static unsigned long long min_events = 8600857659ULL; //0xffff4800000000ULL;
+//static unsigned long long min_events = 0; //8600857659ULL; //0xffff4800000000ULL;
 static unsigned long long min_events = 0xffff4800000000ULL;
 
 struct obj_header {
@@ -207,7 +207,7 @@ static void remove_large_pointer(void *ptr) {
 
 #define MAGIC_NUMBER 0xface
 
-#define IS_MAGIC(x) (((x) & 0xffffffff) == MAGIC_NUMBER)
+#define IS_MAGIC(x) (((x) & 0xffff) == MAGIC_NUMBER)
 
 static void *make_obj_header(void *ptr, size_t size, unsigned short offset) {
 	if (ptr == NULL) {
@@ -225,7 +225,7 @@ static void *make_obj_header(void *ptr, size_t size, unsigned short offset) {
 		struct obj_header *header = (struct obj_header*)((char*)ptr - offset);
 		header->magic = MAGIC_NUMBER;
 		header->offset = 0;
-		header->size = (unsigned)size + offset;
+		header->size = (unsigned)size;
 	}
 
 	if (event_id > min_events) {
@@ -4524,12 +4524,16 @@ char *je_strcat(char *_dst, const char *_src) {
 JEMALLOC_EXPORT int JEMALLOC_NOTHROW
 JEMALLOC_ATTR(nonnull(1))
 je_posix_memalign(void **memptr, size_t alignment, size_t _size) {
-
-	size_t size = _size + ALIGN_PAD(alignment) + OBJ_HEADER_SIZE;
+	if (alignment == 8 || alignment == 4 || alignment <= 2) {
+		memptr[0] = je_malloc(_size);
+		return 0;
+	}
+	size_t size = _size + OBJ_HEADER_SIZE + ALIGN_PAD(alignment);
 	size_t offset;
 	char *head = _je_malloc(size);
 	char *ret = head;
 	assert(ret);
+
 	ret += OBJ_HEADER_SIZE;
 	ret = JE_ALIGN(ret, alignment);
 	ret -= OBJ_HEADER_SIZE;
