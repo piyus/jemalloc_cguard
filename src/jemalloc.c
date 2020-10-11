@@ -3382,7 +3382,16 @@ void* je_san_page_fault_len(void *ptr, int line, char *name) {
 	if (event_id > min_events) {
 		//name = (name < (char*)0x1000) ? null_name : name;
 		//malloc_printf("%lld len: ptr:%p %s():%d %d %d\n", event_id, ptr, name, (line & 0xffff), (line>>16), line);
+		if (trace_fp) {
+			fprintf(trace_fp, "%lld len: ptr:%p %d %d %d\n", event_id, ptr, (line & 0xffff), (line>>16), line);
+		}
+		else {
+			malloc_printf("%lld len: ptr:%p %d %d %d\n", event_id, ptr, (line & 0xffff), (line>>16), line);
+		}
 	}
+
+
+
 	unsigned magic = *(optr-1);
 	unsigned *head;
 	//malloc_printf("magic:%x size:%x\n", magic, optr[0]);
