@@ -4197,11 +4197,13 @@ je_strtod(const char *_nptr, char **_endptr) {
 		fptr = get_func_addr("strtod", je_strtod);
 	}
 	ret = fptr(nptr, endptr);
-	if (*endptr == nptr) {
-		*endptr = (char*)_nptr;
-	}
-	else {
-		*endptr = _MASK(*endptr);
+	if (endptr) {
+		if (*endptr == nptr) {
+			*endptr = (char*)_nptr;
+		}
+		else {
+			*endptr = _MASK(*endptr);
+		}
 	}
 	return ret;
 }
@@ -4219,11 +4221,13 @@ je_strtoul(const char *_nptr, char **_endptr, int base) {
 		fptr = get_func_addr("strtoul", je_strtoul);
 	}
 	ret = fptr(nptr, endptr, base);
-	if (*endptr == nptr) {
-		*endptr = (char*)_nptr;
-	}
-	else {
-		*endptr = _MASK(*endptr);
+	if (endptr) {
+		if (*endptr == nptr) {
+			*endptr = (char*)_nptr;
+		}
+		else {
+			*endptr = _MASK(*endptr);
+		}
 	}
 	return ret;
 
