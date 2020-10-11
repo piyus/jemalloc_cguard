@@ -31,7 +31,7 @@
 #define JE_ALIGN(x, y) (char*)(((size_t)(x) + ALIGN_PAD(y)) & ALIGN_MASK(y))
 
 static unsigned long long event_id = 1;
-//static unsigned long long min_events = 0; //8600857659ULL; //0xffff4800000000ULL;
+//static unsigned long long min_events = 141893739ULL; //8600857659ULL; //0xffff4800000000ULL;
 static unsigned long long min_events = 0xffff4800000000ULL;
 
 struct obj_header {
@@ -4184,6 +4184,28 @@ char *je_strstr(const char *_haystack, const char *_needle) {
 #ifndef ULONG_MAX
 #define	ULONG_MAX	((unsigned long)(~0L))		/* 0xFFFFFFFF */
 #endif
+
+JEMALLOC_EXPORT
+double
+je_strtod(const char *_nptr, char **_endptr) {
+	double ret;
+	const char *nptr = (const char*)UNMASK(_nptr);
+	char **endptr = (char**)UNMASK(_endptr);
+
+	static double (*fptr)(const char*, char**) = NULL;
+	if (fptr == NULL) {
+		fptr = get_func_addr("strtod", je_strtod);
+	}
+	ret = fptr(nptr, endptr);
+	if (*endptr == nptr) {
+		*endptr = (char*)_nptr;
+	}
+	else {
+		*endptr = _MASK(*endptr);
+	}
+	return ret;
+}
+
 
 JEMALLOC_EXPORT
 unsigned long
