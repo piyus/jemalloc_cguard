@@ -31,7 +31,7 @@
 #define JE_ALIGN(x, y) (char*)(((size_t)(x) + ALIGN_PAD(y)) & ALIGN_MASK(y))
 
 static unsigned long long event_id = 1;
-//static unsigned long long min_events = 141893739ULL; //8600857659ULL; //0xffff4800000000ULL;
+//static unsigned long long min_events = 21498951ULL; //8600857659ULL; //0xffff4800000000ULL;
 static unsigned long long min_events = 0xffff4800000000ULL;
 
 struct obj_header {
@@ -3535,6 +3535,79 @@ static int fix_varg_interiors(va_list ap, unsigned long long **fixes, unsigned l
 	return num_fixes;
 }
 
+#define MAX_DIRENT 128
+struct dir_cache_entry {
+	void *src;
+	void *dst;
+};
+
+static struct dir_cache_entry dir_cache[MAX_DIRENT];
+static int num_dir_cache_entries = 0;
+
+static void add_dirent(void *e, void *target) {
+	assert(num_dir_cache_entries < MAX_DIRENT);
+	dir_cache[num_dir_cache_entries].src = e;
+	dir_cache[num_dir_cache_entries].dst = target;
+	num_dir_cache_entries++;
+}
+
+static void* lookup_dirent(void *e) {
+	int i;
+	for (i = 0; i < num_dir_cache_entries; i++) {
+		if (dir_cache[i].src == e) {
+			return dir_cache[i].dst;
+		}
+	}
+	return NULL;
+}
+
+#include <dirent.h>
+
+JEMALLOC_EXPORT
+struct dirent *je_readdir(DIR *_dirp)
+{
+	DIR *dirp = (DIR*)UNMASK(_dirp);
+	static struct dirent* (*fptr)(DIR*) = NULL;
+	if (fptr == NULL) {
+		fptr = get_func_addr("readdir", je_readdir);
+		assert(fptr);
+	}
+  struct dirent *e = fptr(dirp);
+	if (e == NULL) {
+		return NULL;
+	}
+	struct dirent *t = (struct dirent*)lookup_dirent(e);
+	if (t == NULL) {
+		t = (struct dirent*)je_malloc(sizeof(struct dirent));
+		add_dirent(e, t);
+	}
+	memcpy(t, e, sizeof(struct dirent));
+  return t;
+}
+
+JEMALLOC_EXPORT
+struct dirent64 *je_readdir64(DIR *_dirp)
+{
+	DIR *dirp = (DIR*)UNMASK(_dirp);
+	static struct dirent64* (*fptr)(DIR*) = NULL;
+	if (fptr == NULL) {
+		fptr = get_func_addr("readdir64", je_readdir64);
+		assert(fptr);
+	}
+  struct dirent64 *e = fptr(dirp);
+	if (e == NULL) {
+		return NULL;
+	}
+	struct dirent64 *t = (struct dirent64*)lookup_dirent(e);
+	if (t == NULL) {
+		t = (struct dirent64*)je_malloc(sizeof(struct dirent64));
+		add_dirent(e, t);
+	}
+	memcpy(t, e, sizeof(struct dirent64));
+  return t;
+}
+
+
 #include "wordcopy.c"
 
 // Indirect call 
@@ -4063,13 +4136,13 @@ void je_san_abort2(void *base, void *cur, void *limit, void *ptrlimit, void *siz
 		char *orig_base;
 		if (_cur < (char*)0x8000000) {
 			orig_base = _je_san_get_base(_cur);
-			if (!(orig_base + *((unsigned*)(orig_base+4)) >= _base)) {
+			if (!(orig_base + *((unsigned*)(orig_base+4)) + OBJ_HEADER_SIZE >= _base)) {
 				malloc_printf("orig_base:%p base:%p _base:%p _cur:%p cur:%p\n", orig_base, base, _base, _cur, cur);
 				if (orig_base != _base) {
 					assert(base != _base);
 				}
 			}
-			assert(orig_base + *((unsigned*)(orig_base+4)) >= _base);
+			assert(orig_base + *((unsigned*)(orig_base+4)) + OBJ_HEADER_SIZE >= _base);
 		}
 		else {
 			orig_base = _je_san_get_base(_base);
