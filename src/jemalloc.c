@@ -31,7 +31,7 @@
 #define JE_ALIGN(x, y) (char*)(((size_t)(x) + ALIGN_PAD(y)) & ALIGN_MASK(y))
 
 static unsigned long long event_id = 1;
-//static unsigned long long min_events = 21498951ULL; //8600857659ULL; //0xffff4800000000ULL;
+//static unsigned long long min_events = 0; //21498951ULL; //8600857659ULL; //0xffff4800000000ULL;
 static unsigned long long min_events = 0xffff4800000000ULL;
 
 struct obj_header {
@@ -109,6 +109,7 @@ static char *je_stack_begin = NULL;
 #define UNMASK(x) ((char*)((((uint64_t)(x)) & 0xffffffffffffULL)))
 //#define _MASK(x) (char*)(x) //((char*)((((uint64_t)(x)) | (INTERIOR_STR << 48))))
 #define _MASK(x) ((enable_masking) ? ((char*)((((uint64_t)(x)) | (INTERIOR_STR << 48)))) : (char*)(x))
+#define _MASK1(x) ((enable_masking) ? ((char*)((((uint64_t)(x)) | (1ULL << 48)))) : (char*)(x))
 
 #include "qsort.c"
 
@@ -3375,8 +3376,38 @@ void* je_san_page_fault_call(void *ptr, int line, char *name) {
 
 static void print_all_obstack();
 
+
 JEMALLOC_EXPORT
-void* je_san_page_fault_len(void *ptr, int line, char *name) {
+void* je_san_interior(void *_base, void *_ptr) {
+	//if (_base == _ptr) {
+	//	return _base;
+	//}
+	return _MASK(_ptr);
+}
+
+JEMALLOC_EXPORT
+void* je_san_interior_checked(void *_base, void *_ptr) {
+	return je_san_interior(_base, _ptr);
+	void *base = UNMASK(_base);
+	if (base == NULL) {
+		return _base;
+	}
+	void *ptr = UNMASK(_ptr);
+	unsigned *head = _je_san_get_base(ptr);
+	if (head == NULL) {
+		return _MASK1(ptr);
+	}
+	unsigned size = head[1];
+	char *start = (char*)(head + 2);
+	char *end = start + size;
+	if (ptr < (void*)start || ptr >= (void*)end) {
+		return _MASK1(ptr);
+	}
+	return _MASK(_ptr);
+}
+
+JEMALLOC_EXPORT
+unsigned je_san_page_fault_len(void *ptr, int line, char *name) {
 	event_id++;
 	unsigned *optr = (unsigned*)UNMASK(ptr);
 	if (event_id > min_events) {
@@ -3424,7 +3455,7 @@ void* je_san_page_fault_len(void *ptr, int line, char *name) {
 		}
 		//assert(ptr == (void*)optr);
 	}
-	return optr;
+	return *optr;
 }
 
 #if 0
