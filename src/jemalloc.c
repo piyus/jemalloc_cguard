@@ -3093,7 +3093,7 @@ static void* get_stack_ptr_base(void *ptr) {
 			}
 		}
 	}
-	print_stack(ptr);
+	//print_stack(ptr);
 	return NULL;
 }
 
@@ -3165,6 +3165,35 @@ static void *_je_san_get_base(void *ptr) {
 	if (!e) {
 		//failed_large(ptr);
 		malloc_printf("unable to find the base of : %p base:%p\n", ptr, ptr_page);
+	}
+	assert(e);
+	char *eaddr = extent_addr_get(e);
+	if (!extent_slab_get(e)) {
+		return eaddr;
+	}
+	int szind = extent_szind_get(e);
+	size_t diff = (size_t)((char*)ptr - eaddr);
+	size_t offset = diff % bin_infos[szind].reg_size;
+	return ptr - offset;
+}
+
+static void *_je_san_get_base1(void *ptr) {
+	if (ptr < (void*)0x80000000) {
+		void *ret = get_global_header(ptr);
+		return ret;
+	}
+	if (is_stack_ptr(ptr)) {
+		unsigned *ret = get_stack_ptr_base(ptr);
+		return ret;
+	}
+
+	tsd_t *tsd = tsd_fetch_min();
+	tsdn_t *tsdn = tsd_tsdn(tsd);
+	assert(tsdn);
+	char *ptr_page = (char*)ptr;
+	extent_t *e = iealloc(tsdn, ptr_page);
+	if (!e) {
+		return NULL;
 	}
 	assert(e);
 	char *eaddr = extent_addr_get(e);
@@ -3379,24 +3408,48 @@ static void print_all_obstack();
 
 JEMALLOC_EXPORT
 void* je_san_interior(void *_base, void *_ptr) {
-	//if (_base == _ptr) {
-	//	return _base;
-	//}
+	if (_base == _ptr) {
+		return _base;
+	}
 	return _MASK(_ptr);
 }
 
 JEMALLOC_EXPORT
 void* je_san_interior_checked(void *_base, void *_ptr) {
-	return je_san_interior(_base, _ptr);
-	void *base = UNMASK(_base);
-	if (base == NULL) {
-		return _base;
+	if (_base == _ptr) {
+		return _ptr;
 	}
 	void *ptr = UNMASK(_ptr);
-	unsigned *head = _je_san_get_base(ptr);
+	void *base = UNMASK(_base);
+	if (ptr == NULL || base == NULL) {
+		return _MASK1(ptr);
+	}
+	unsigned *head = _je_san_get_base1(base);
 	if (head == NULL) {
 		return _MASK1(ptr);
 	}
+
+	unsigned size = head[1];
+	char *start = (char*)(head + 2);
+	char *end = start + size;
+	if (ptr < (void*)start || ptr >= (void*)end) {
+		return _MASK1(ptr);
+	}
+	return _MASK(_ptr);
+}
+
+JEMALLOC_EXPORT
+void* je_san_interior_must_check(void *_base, void *_ptr) {
+	void *ptr = UNMASK(_ptr);
+	void *base = UNMASK(_base);
+	if (ptr == NULL || base == NULL) {
+		return _MASK1(ptr);
+	}
+	unsigned *head = _je_san_get_base1(base);
+	if (head == NULL) {
+		return _MASK1(ptr);
+	}
+
 	unsigned size = head[1];
 	char *start = (char*)(head + 2);
 	char *end = start + size;
