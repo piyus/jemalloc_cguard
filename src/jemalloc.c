@@ -2762,6 +2762,8 @@ static void initialize_globals(struct obj_header *start, struct obj_header *end)
 	}
 }
 
+static void *MinGlobalAddr = (void*)0xFFFFFFFFFFFFULL;
+
 static void
 initialize_sections()
 {
@@ -2810,6 +2812,9 @@ initialize_sections()
 			start = (struct obj_header*)Shdr[i].sh_addr;
 			end = (struct obj_header*)(Shdr[i].sh_addr + Shdr[i].sh_size);
 			if (start) {
+				if ((void*)start < MinGlobalAddr) {
+					MinGlobalAddr = start;
+				}
 				initialize_globals(start, end);
 			}
 		}
@@ -2860,7 +2865,7 @@ static void *get_global_header(char *ptr) {
 	if (ret && ptr < ((char*)ret) + ret->size + OBJ_HEADER_SIZE) {
 		return ret;
 	}
-	malloc_printf("unable to find base corresponding to ptr:%p\n", ptr);
+	//malloc_printf("unable to find base corresponding to ptr:%p\n", ptr);
 	return NULL;
 #if 0
 	int i;
@@ -3178,6 +3183,9 @@ static void *_je_san_get_base(void *ptr) {
 }
 
 static void *_je_san_get_base1(void *ptr) {
+	if (ptr < MinGlobalAddr) {
+		return NULL;
+	}
 	if (ptr < (void*)0x80000000) {
 		void *ret = get_global_header(ptr);
 		return ret;
@@ -3191,7 +3199,15 @@ static void *_je_san_get_base1(void *ptr) {
 	tsdn_t *tsdn = tsd_tsdn(tsd);
 	assert(tsdn);
 	char *ptr_page = (char*)ptr;
-	extent_t *e = iealloc(tsdn, ptr_page);
+
+	rtree_ctx_t rtree_ctx_fallback;
+  rtree_ctx_t *rtree_ctx = tsdn_rtree_ctx(tsdn, &rtree_ctx_fallback);
+
+  extent_t *e = rtree_extent_read(tsdn, &extents_rtree, rtree_ctx,
+      (uintptr_t)ptr_page, false);
+
+
+	//extent_t *e = iealloc(tsdn, ptr_page);
 	if (!e) {
 		return NULL;
 	}
