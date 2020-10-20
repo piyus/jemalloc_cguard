@@ -31,7 +31,7 @@
 #define JE_ALIGN(x, y) (char*)(((size_t)(x) + ALIGN_PAD(y)) & ALIGN_MASK(y))
 
 static unsigned long long event_id = 1;
-//static unsigned long long min_events = 0; //21498951ULL; //8600857659ULL; //0xffff4800000000ULL;
+//static unsigned long long min_events = 0; //1380498462ULL; //21498951ULL; //8600857659ULL; //0xffff4800000000ULL;
 static unsigned long long min_events = 0xffff4800000000ULL;
 
 struct obj_header {
@@ -42,15 +42,17 @@ struct obj_header {
 
 static FILE *trace_fp = NULL;
 
-static void abort3()
+static void abort3(const char *msg)
 {
 	if (trace_fp) {
-		fprintf(trace_fp, "exitting\n");
+		fprintf(trace_fp, "%s\n", msg);
 		syncfs(fileno(trace_fp));
 		fclose(trace_fp);
 	}
 	assert(0);
 }
+
+#define ABORT4(x) ({ if (!(x)) { abort3(#x); }   })
 
 #ifndef NO_SAFETY
 #define OBJ_HEADER_SIZE (sizeof(struct obj_header))
@@ -250,6 +252,9 @@ static void *get_obj_header(void *ptr) {
 		return NULL;
 	}
 	struct obj_header *header = ((struct obj_header*)ptr) - 1;
+	if (header->magic != MAGIC_NUMBER) {
+		ABORT4(0);
+	}
 	assert(header->magic == MAGIC_NUMBER);
 	unsigned short offset = header->offset;
 	char *head = (char*)header - offset;
@@ -2923,7 +2928,7 @@ static bool is_global(unsigned long long val) {
 JEMALLOC_EXPORT
 void je_san_trace(char *_name, int line, int type, unsigned long long val1) {
 	event_id++;
-	if (event_id < min_events) {
+	if (event_id < min_events /*&& !(type == ENTRY_TY || type == EXIT_TY)*/) {
 		return;
 	}
 
@@ -2992,7 +2997,7 @@ void je_san_trace(char *_name, int line, int type, unsigned long long val1) {
 		//fprintf(trace_fp, "[%lld] sub: %d -> %llx\n", id, line, val);
 	}
 	else {
-		abort3();
+		abort3("incorrect_type");
 	}
 	id++;
 
@@ -3293,6 +3298,7 @@ void* je_san_page_fault_load(void *ptr, int line, char *name) {
 	event_id++;
 	//malloc_printf("1. store: ptr:%p val:%p\n", ptr, val);
 	void *optr = (void*)UNMASK(ptr);
+
 	if (event_id > min_events || need_tracking(*((unsigned long long*)optr))) {
 		name = (name < (char*)0x1000) ? null_name : UNMASK(name);
 		if (trace_fp) {
@@ -3304,6 +3310,15 @@ void* je_san_page_fault_load(void *ptr, int line, char *name) {
 				event_id, ptr, *((char**)optr), name, (line & 0xffff), (line>>16), line);
 		}
 	}
+
+	if (((((size_t)ptr)>>48) & 1) != 0) {
+		unsigned *base = je_san_get_base(optr);
+		if (((char*)base) > (char*)optr || (char*)optr >= ((char*)base)+*(base-1)) {
+			malloc_printf("base:%p ptr:%p len:%d\n", base, ptr, *(base-1));
+			ABORT4( ((((size_t)ptr)>>48) & 1) == 0 );
+		}
+	}
+	//ABORT4( ((((size_t)ptr)>>48) & 1) == 0 );
 #if 0
 	void *oval = (void*)(((unsigned long long)val) & 0x7fffffffffffffffULL);
 	if (oval) {
@@ -3325,6 +3340,7 @@ JEMALLOC_EXPORT
 void* je_san_page_fault_store(void *ptr, void *val, int line, char *name) {
 	event_id++;
 	void *optr = (void*)UNMASK(ptr);
+
 	//void *oval = (void*)UNMASK(val);
 	if (event_id > min_events || need_tracking((unsigned long long)val)/* || oval < (void*)0x80000000*/) {
 		name = (name < (char*)0x1000) ? null_name : UNMASK(name);
@@ -3335,6 +3351,16 @@ void* je_san_page_fault_store(void *ptr, void *val, int line, char *name) {
 			malloc_printf("%lld store: ptr:%p val:%p %d %d %d\n", event_id, ptr, val, (line & 0xffff), (line>>16), line);
 		}
 	}
+
+	if (((((size_t)ptr)>>48) & 1) != 0) {
+		unsigned *base = je_san_get_base(optr);
+		if (((char*)base) > (char*)optr || (char*)optr >= ((char*)base)+*(base-1)) {
+			malloc_printf("base:%p ptr:%p len:%d\n", base, ptr, *(base-1));
+			ABORT4( ((((size_t)ptr)>>48) & 1) == 0 );
+		}
+	}
+
+	//ABORT4( ((((size_t)ptr)>>48) & 1) == 0 );
 #if 0
 	void *oval = (void*)(((unsigned long long)val) & 0x7fffffffffffffffULL);
 	if (oval) {
@@ -3445,10 +3471,15 @@ void* je_san_interior_checked(void *_base, void *_ptr) {
 		return _MASK1(ptr);
 	}
 
+	assert(IS_MAGIC(head[0]));
+
 	unsigned size = head[1];
 	char *start = (char*)(head + 2);
 	char *end = start + size;
 	if (ptr < (void*)start || ptr >= (void*)end) {
+		if (trace_fp) {
+			fprintf(trace_fp, "making interior: start:%p ptr:%p base:%p size:%d end:%p\n", start, ptr, base, size, end);
+		}
 		return _MASK1(ptr);
 	}
 	return _MASK(_ptr);
@@ -3466,10 +3497,15 @@ void* je_san_interior_must_check(void *_base, void *_ptr) {
 		return _MASK1(ptr);
 	}
 
+	assert(IS_MAGIC(head[0]));
+
 	unsigned size = head[1];
 	char *start = (char*)(head + 2);
 	char *end = start + size;
 	if (ptr < (void*)start || ptr >= (void*)end) {
+		if (trace_fp) {
+			fprintf(trace_fp, "making interior: start:%p ptr:%p base:%p size:%d end:%p\n", start, ptr, base, size, end);
+		}
 		return _MASK1(ptr);
 	}
 	return _MASK(_ptr);
@@ -3479,6 +3515,7 @@ JEMALLOC_EXPORT
 unsigned je_san_page_fault_len(void *ptr, int line, char *name) {
 	event_id++;
 	unsigned *optr = (unsigned*)UNMASK(ptr);
+
 	if (event_id > min_events) {
 		//name = (name < (char*)0x1000) ? null_name : name;
 		//malloc_printf("%lld len: ptr:%p %s():%d %d %d\n", event_id, ptr, name, (line & 0xffff), (line>>16), line);
@@ -3490,6 +3527,10 @@ unsigned je_san_page_fault_len(void *ptr, int line, char *name) {
 		}
 	}
 
+	if (((((size_t)ptr)>>48) & 1) != 0 ) {
+		malloc_printf("%lld len: ptr:%p %d %d %d\n", event_id, ptr, (line & 0xffff), (line>>16), line);
+	}
+	ABORT4( ((((size_t)ptr)>>48) & 1) == 0 );
 
 
 	unsigned magic = *(optr-1);
@@ -3501,7 +3542,7 @@ unsigned je_san_page_fault_len(void *ptr, int line, char *name) {
 			if (trace_fp) {
 				fprintf(trace_fp, "%lld ptr:%p head:%p line:%d\n", event_id, optr, head, line);
 			}
-			abort3();
+			abort3("no-base");
 		}
 
 		if (!IS_MAGIC(head[0])) {
@@ -3512,7 +3553,7 @@ unsigned je_san_page_fault_len(void *ptr, int line, char *name) {
 			if (ptr == optr) {
 				print_all_obstack();
 				malloc_printf("%lld ptr:%p head:%p line:%d\n", event_id, optr, head, line);
-				je_san_trace("get_length", 0, 10, 0);
+				ABORT4(ptr != (void*)optr);
 			}
 			assert(ptr != (void*)optr);
 		//}
@@ -4274,7 +4315,7 @@ void je_san_abort2(void *base, void *cur, void *limit, void *ptrlimit, void *siz
 		malloc_printf("head:%p head0:%x head1:%x\n", head, head[0], head[1]);
 		myfunc3();
 	}
-	abort3();
+	abort3("abort2");
 }
 
 extern char** environ;
@@ -5161,6 +5202,9 @@ JEMALLOC_EXPORT JEMALLOC_ALLOCATOR JEMALLOC_RESTRICT_RETURN
 void JEMALLOC_NOTHROW *
 JEMALLOC_ALLOC_SIZE(2)
 je_realloc(void *ptr, size_t arg_size) {
+	if (trace_fp) {
+		fprintf(trace_fp, "realloc:%p\n", ptr);
+	}
 	void *head = get_obj_header(ptr);
 	void *newptr = _je_realloc(head, arg_size + OBJ_HEADER_SIZE);
 	return make_obj_header(newptr, arg_size, 0);
