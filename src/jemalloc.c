@@ -60,6 +60,11 @@ static void abort3(const char *msg)
 #define OBJ_HEADER_SIZE 0
 #endif
 
+
+static inline size_t get_size_from_obj_header(struct obj_header *h) {
+	return h->size + OBJ_HEADER_SIZE + h->offset;
+}
+
 #ifndef NO_SAFETY
 
 static void *_je_san_get_base(void *ptr);
@@ -122,90 +127,29 @@ static bool need_tracking(unsigned long long val) {
 	return (val >> TRACK_SHIFT) == TRACK_STR;
 }
 
-#if 0
-static void failed_large(void *ptr) {
-	int i;
-	malloc_printf("failing large : %d ptr:%p\n", num_large_ptrs, ptr);
-	for (i = 0; i < num_large_ptrs; i++) {
-		if (large_ptrs[i]) {
-			unsigned *sizeptr = ((unsigned*)large_ptrs[i]) + 1;
-			void *start = (void*)(sizeptr + 1);
-			void *end = (void*)((char*)start + sizeptr[0]);
-			malloc_printf("start: %p end:%p ptr:%p\n", start, end, ptr);
-			if (ptr >= start && ptr < end) {
-				malloc_printf("found %p\n", ptr);
-			}
-		}
+static void add_large_pointer(void *ptr, size_t size) {
+	if (size > SC_SMALL_MAXCLASS) {
+		tsd_t *tsd = tsd_fetch_min();
+		tsdn_t *tsdn = tsd_tsdn(tsd);
+		assert(tsdn);
+		extent_t *e = iealloc(tsdn, ptr);
+		rtree_ctx_t rtree_ctx_fallback;
+  	rtree_ctx_t *rtree_ctx = tsdn_rtree_ctx(tsdn, &rtree_ctx_fallback);
+		szind_t szind = extent_szind_get_maybe_invalid(e);
+		extent_interior_register1(tsdn, rtree_ctx, e, szind);
 	}
 }
-#endif
 
-static void add_large_pointer(void *ptr) {
-	tsd_t *tsd = tsd_fetch_min();
-	tsdn_t *tsdn = tsd_tsdn(tsd);
-	assert(tsdn);
-	extent_t *e = iealloc(tsdn, ptr);
-	rtree_ctx_t rtree_ctx_fallback;
-  rtree_ctx_t *rtree_ctx = tsdn_rtree_ctx(tsdn, &rtree_ctx_fallback);
-	szind_t szind = extent_szind_get_maybe_invalid(e);
-	extent_interior_register1(tsdn, rtree_ctx, e, szind);
-
-#if 0
-	assert(num_large_ptrs < MAX_LARGE_PTRS);
-	large_ptrs[num_large_ptrs] = ptr;
-	num_large_ptrs++;
-#endif
-	//malloc_printf("adding large ptr: %p num_large_ptrs:%d\n", ptr, num_large_ptrs);
-}
-
-#if 0
-static void *search_large_pointer(void *ptr) {
-	int i;
-	//malloc_printf("searching large : %d\n", num_large_ptrs);
-	for (i = num_large_ptrs-1; i >= 0; i--) {
-		if (large_ptrs[i]) {
-			unsigned *sizeptr = ((unsigned*)large_ptrs[i]) + 1;
-			void *start = (void*)(sizeptr + 1);
-			void *end = (void*)((char*)start + sizeptr[0]);
-			//malloc_printf("start: %p end:%p ptr:%p\n", start, end, ptr);
-			if (ptr >= start && ptr < end) {
-				//malloc_printf("found\n");
-				return large_ptrs[i];
-			}
-		}
+static void remove_large_pointer(void *ptr, size_t size) {
+	if (size > SC_SMALL_MAXCLASS) {
+		tsd_t *tsd = tsd_fetch_min();
+		tsdn_t *tsdn = tsd_tsdn(tsd);
+		assert(tsdn);
+		extent_t *e = iealloc(tsdn, ptr);
+		rtree_ctx_t rtree_ctx_fallback;
+  	rtree_ctx_t *rtree_ctx = tsdn_rtree_ctx(tsdn, &rtree_ctx_fallback);
+		extent_interior_deregister1(tsdn, rtree_ctx, e);
 	}
-	return NULL;
-}
-#endif
-
-static void remove_large_pointer(void *ptr) {
-	//int i;
-	//malloc_printf("removing large : %p\n", ptr);
-
-	tsd_t *tsd = tsd_fetch_min();
-	tsdn_t *tsdn = tsd_tsdn(tsd);
-	assert(tsdn);
-	extent_t *e = iealloc(tsdn, ptr);
-	rtree_ctx_t rtree_ctx_fallback;
-  rtree_ctx_t *rtree_ctx = tsdn_rtree_ctx(tsdn, &rtree_ctx_fallback);
-	extent_interior_deregister1(tsdn, rtree_ctx, e);
-
-#if 0
-
-	for (i = 0; i < num_large_ptrs; i++) {
-		if (large_ptrs[i]) {
-			unsigned *sizeptr = ((unsigned*)large_ptrs[i]) + 1;
-			void *start = (void*)(sizeptr + 1);
-			void *end = (void*)((char*)start + sizeptr[0]);
-			//malloc_printf("start: %p end:%p ptr:%p\n", start, end, ptr);
-			if (ptr >= start && ptr < end) {
-				large_ptrs[i] = NULL;
-				//malloc_printf("removed\n");
-				return;
-			}
-		}
-	}
-#endif
 }
 
 #define MAGIC_NUMBER 0xface
@@ -213,33 +157,7 @@ static void remove_large_pointer(void *ptr) {
 #define IS_MAGIC(x) (((x) & 0xffff) == MAGIC_NUMBER)
 
 static void *make_obj_header(void *ptr, size_t size, unsigned short offset) {
-	if (ptr == NULL) {
-		return ptr;
-	}
-
-	if (size+OBJ_HEADER_SIZE+offset > SC_SMALL_MAXCLASS) {
-		//assert(search_large_pointer(ptr) == NULL);
-		//assert(search_large_pointer(ptr+size-1) == NULL);
-		add_large_pointer((char*)ptr - offset);
-	}
-
-	if (offset) {
-		assert(offset >= 8);
-		struct obj_header *header = (struct obj_header*)((char*)ptr - offset);
-		header->magic = MAGIC_NUMBER;
-		header->offset = 0;
-		header->size = (unsigned)size;
-	}
-
-	if (event_id > min_events) {
-		static int entry = 0;
-		entry++;
-		if (trace_fp && entry == 1) {
-			fprintf(trace_fp, "mal ptr:%p sz:%zd offset:%d\n", ptr, size, (int)offset);
-		}
-		entry--;
-	}
-	event_id++;
+	assert(ptr);
 	struct obj_header *header = (struct obj_header*)ptr;
 	header->magic = MAGIC_NUMBER;
 	header->offset = offset;
@@ -247,45 +165,16 @@ static void *make_obj_header(void *ptr, size_t size, unsigned short offset) {
 	return &header[1];
 }
 
-static void *get_obj_header(void *ptr) {
-	if (ptr == NULL) {
-		return NULL;
-	}
-	struct obj_header *header = ((struct obj_header*)ptr) - 1;
-	if (header->magic != MAGIC_NUMBER) {
-		ABORT4(0);
-	}
-	assert(header->magic == MAGIC_NUMBER);
-	unsigned short offset = header->offset;
-	char *head = (char*)header - offset;
-	if (header->size  > SC_SMALL_MAXCLASS - OBJ_HEADER_SIZE - offset) {
-		//assert(search_large_pointer(ptr));
-		//assert(search_large_pointer(ptr+header->size-1));
-		//size_t size = header->size + OBJ_HEADER_SIZE;
-		//char *eptr = (char*)header + (rand() % size);
-		//void *base = _je_san_get_base(eptr);
-		//assert(base == (void*)header);
 
-		remove_large_pointer(head);
-	}
-	return head;
-
+static inline bool is_valid_obj_header(struct obj_header *head) {
+	return head->magic == MAGIC_NUMBER;
 }
 
-/*
-static bool is_valid_obj_header(void *ptr) {
-	if (ptr == NULL) {
-		return true;
-	}
-	struct obj_header *header = (struct obj_header*)ptr;
-	return header->magic == MAGIC_NUMBER;
-}
-*/
 
 #else
 #define make_obj_header(x, y) x
 #define get_obj_header(x) x
-//#define is_valid_obj_header(x) 1
+#define is_valid_obj_header(x) 1
 #endif
 
 
@@ -3141,7 +3030,7 @@ static bool is_stack_ptr(char *ptr) {
 	return ptr >= lower && ptr <= higher;
 }
 
-static void *_je_san_get_base(void *ptr) {
+static void *__je_san_get_base(void *ptr) {
 	if (ptr < (void*)0x80000000) {
 		void *ret = get_global_header(ptr);
 		if (ret == NULL) {
@@ -3187,7 +3076,16 @@ static void *_je_san_get_base(void *ptr) {
 	return ptr - offset;
 }
 
-static void *_je_san_get_base1(void *ptr) {
+static void *_je_san_get_base(void *ptr) {
+	struct obj_header *head = (struct obj_header*)__je_san_get_base(ptr);
+	assert(IS_MAGIC(head->magic));
+	if (head->offset) {
+		return (void*)((char*)head + head->offset);
+	}
+	return head;
+}
+
+static void *__je_san_get_base1(void *ptr) {
 	if (ptr < MinGlobalAddr) {
 		return NULL;
 	}
@@ -3227,12 +3125,26 @@ static void *_je_san_get_base1(void *ptr) {
 	return ptr - offset;
 }
 
+static void *_je_san_get_base1(void *ptr) {
+	struct obj_header *head = (struct obj_header*)__je_san_get_base1(ptr);
+	if (head == NULL) {
+		return head;
+	}
+	assert(IS_MAGIC(head->magic));
+	if (head->offset) {
+		return (void*)((char*)head + head->offset);
+	}
+	return head;
+}
+
 
 JEMALLOC_EXPORT JEMALLOC_ALLOCATOR JEMALLOC_RESTRICT_RETURN
 void JEMALLOC_NOTHROW *
 JEMALLOC_ATTR(malloc) JEMALLOC_ALLOC_SIZE(1)
 je_malloc(size_t size) {
 	void *ret = _je_malloc(size + OBJ_HEADER_SIZE);
+	assert(ret);
+	add_large_pointer(ret, size + OBJ_HEADER_SIZE);
 	return make_obj_header(ret, size, 0);
 }
 
@@ -4773,22 +4685,7 @@ char *je_strcat(char *_dst, const char *_src) {
 JEMALLOC_EXPORT int JEMALLOC_NOTHROW
 JEMALLOC_ATTR(nonnull(1))
 je_posix_memalign(void **memptr, size_t alignment, size_t _size) {
-	if (alignment == 8 || alignment == 4 || alignment <= 2) {
-		memptr[0] = je_malloc(_size);
-		return 0;
-	}
-	size_t size = _size + OBJ_HEADER_SIZE + ALIGN_PAD(alignment);
-	size_t offset;
-	char *head = _je_malloc(size);
-	char *ret = head;
-	assert(ret);
-
-	ret += OBJ_HEADER_SIZE;
-	ret = JE_ALIGN(ret, alignment);
-	ret -= OBJ_HEADER_SIZE;
-	offset = ret - head;
-	assert(OBJ_HEADER_SIZE + offset + _size <= size);
-	memptr[0] = make_obj_header(ret, _size, offset);
+	memptr[0] = je_aligned_alloc(alignment, _size);
 	return 0;
 
 #if 0
@@ -4834,17 +4731,27 @@ JEMALLOC_EXPORT JEMALLOC_ALLOCATOR JEMALLOC_RESTRICT_RETURN
 void JEMALLOC_NOTHROW *
 JEMALLOC_ATTR(malloc) JEMALLOC_ALLOC_SIZE(2)
 je_aligned_alloc(size_t alignment, size_t _size) {
-	size_t size = _size + ALIGN_PAD(alignment) + OBJ_HEADER_SIZE;
+	if (alignment == 8 || alignment == 4 || alignment <= 2) {
+		return je_malloc(_size);
+	}
+	size_t size = _size + ALIGN_PAD(alignment);
 	size_t offset;
-	char *head = _je_malloc(size);
-	char *ret = head;
-	assert(ret);
-	ret += OBJ_HEADER_SIZE;
+	char *ret = je_malloc(size);
+	char *head = ret;
 	ret = JE_ALIGN(ret, alignment);
-	ret -= OBJ_HEADER_SIZE;
 	offset = ret - head;
-	assert(OBJ_HEADER_SIZE + offset + _size <= size);
-	return make_obj_header(ret, _size, offset);
+	struct obj_header *header = ((struct obj_header*)head) - 1;
+
+	if (offset == 0) {
+		header->size = _size;
+		return ret;
+	}
+	assert(offset >= OBJ_HEADER_SIZE);
+	header->offset = offset;
+	ret -= OBJ_HEADER_SIZE;
+	ret = make_obj_header(ret, _size, 0);
+	return ret;
+
 #if 0
 	assert(0);
 	void *ret;
@@ -4928,6 +4835,7 @@ je_calloc(size_t num, size_t size) {
 	size_t total_size = num * size;
 	void *ret = _je_malloc(total_size + OBJ_HEADER_SIZE);
 	if (ret) {
+		add_large_pointer(ret, total_size + OBJ_HEADER_SIZE);
 		ret = make_obj_header(ret, total_size, 0);
 		bzero(ret, total_size);
 	}
@@ -5201,12 +5109,18 @@ _je_realloc(void *ptr, size_t arg_size) {
 JEMALLOC_EXPORT JEMALLOC_ALLOCATOR JEMALLOC_RESTRICT_RETURN
 void JEMALLOC_NOTHROW *
 JEMALLOC_ALLOC_SIZE(2)
-je_realloc(void *ptr, size_t arg_size) {
-	if (trace_fp) {
-		fprintf(trace_fp, "realloc:%p\n", ptr);
+je_realloc(void *_ptr, size_t arg_size) {
+	void *ptr = UNMASK(_ptr);
+	struct obj_header *head = NULL;
+	if (ptr) {
+		head = (struct obj_header*)__je_san_get_base(ptr);
+		assert(head);
+		assert(is_valid_obj_header(head));
+		remove_large_pointer(head, get_size_from_obj_header(head));
+		assert(ptr == (void*)(&head[1]));
 	}
-	void *head = get_obj_header(ptr);
 	void *newptr = _je_realloc(head, arg_size + OBJ_HEADER_SIZE);
+	add_large_pointer(newptr, arg_size + OBJ_HEADER_SIZE);
 	return make_obj_header(newptr, arg_size, 0);
 }
 
@@ -5317,9 +5231,14 @@ _je_free(void *ptr) {
 JEMALLOC_EXPORT void JEMALLOC_NOTHROW
 je_free(void *_ptr) {
 	void *ptr = (void*)UNMASK(_ptr);
-	void *head = get_obj_header(ptr);
-	//void *head = (ptr) ? je_san_get_base(ptr) : NULL;
-	//assert(is_valid_obj_header(head));
+	if (ptr == NULL) {
+		return;
+	}
+	struct obj_header *head = __je_san_get_base(ptr);
+	assert(head);
+	assert(is_valid_obj_header(head));
+	assert(ptr == (void*)((char*)(&head[1]) + head->offset));
+	remove_large_pointer(head, get_size_from_obj_header(head));
 	_je_free(head);
 }
 
