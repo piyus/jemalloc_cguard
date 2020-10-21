@@ -5263,7 +5263,7 @@ je_free(void *_ptr) {
 	struct obj_header *head = __je_san_get_base(ptr);
 	assert(head);
 	assert(is_valid_obj_header(head));
-	assert(ptr == (void*)((char*)(&head[1]) + head->offset));
+	assert(ptr == (void*)((char*)(&head[1]) + head->offset) || ptr == (void*)(&head[2]));
 	remove_large_pointer(head, get_size_from_obj_header(head));
 	_je_free(head);
 }
