@@ -2963,13 +2963,16 @@ void je_san_record_stack_pointer(void *ptr) {
 }
 
 static void print_stack(void *ptr) {
+	if (trace_fp == NULL) {
+		return;
+	}
 	int i;
-	malloc_printf("num_stack_ptrs:%d event_id:%lld\n", num_stack_ptrs, event_id);
+	fprintf(trace_fp, "num_stack_ptrs:%d event_id:%lld begin:%p\n", num_stack_ptrs, event_id, je_stack_begin);
 	for (i = num_stack_ptrs-1; i >= 0; i--) {
 		assert(stack_ptrs[i]);
 		unsigned *sizeptr = ((unsigned*)stack_ptrs[i]) - 1;
 		unsigned size = sizeptr[0];
-		malloc_printf("size:%d magic:%x start:%p ptr:%p\n", size, *(sizeptr-1), sizeptr+1, ptr);
+		fprintf(trace_fp, "size:%d magic:%x start:%p ptr:%p\n", size, *(sizeptr-1), sizeptr+1, ptr);
 	}
 }
 
@@ -3026,7 +3029,6 @@ static bool is_stack_ptr(char *ptr) {
 	char stack_var;
 	char *lower = &stack_var;
 	char *higher = je_stack_begin;
-	//malloc_printf("lower:%p higher:%p ptr:%p\n", lower, higher, ptr);
 	return ptr >= lower && ptr <= higher;
 }
 
@@ -3224,7 +3226,13 @@ void* je_san_page_fault_load(void *ptr, int line, char *name) {
 	}
 
 	if (((((size_t)ptr)>>48) & 1) != 0) {
-		unsigned *base = je_san_get_base(optr);
+		unsigned *base = _je_san_get_base1(optr);
+		if (base == NULL) {
+			malloc_printf("base:%p ptr:%p\n", base, ptr);
+			ABORT4( ((((size_t)ptr)>>48) & 1) == 0 );
+		}
+		base = (unsigned*)((char*)base + OBJ_HEADER_SIZE);
+
 		if (((char*)base) > (char*)optr || (char*)optr >= ((char*)base)+*(base-1)) {
 			malloc_printf("base:%p ptr:%p len:%d\n", base, ptr, *(base-1));
 			ABORT4( ((((size_t)ptr)>>48) & 1) == 0 );
@@ -3265,7 +3273,13 @@ void* je_san_page_fault_store(void *ptr, void *val, int line, char *name) {
 	}
 
 	if (((((size_t)ptr)>>48) & 1) != 0) {
-		unsigned *base = je_san_get_base(optr);
+		unsigned *base = _je_san_get_base1(optr);
+		if (base == NULL) {
+			malloc_printf("base:%p ptr:%p\n", base, ptr);
+			ABORT4( ((((size_t)ptr)>>48) & 1) == 0 );
+		}
+		base = (unsigned*)((char*)base + OBJ_HEADER_SIZE);
+
 		if (((char*)base) > (char*)optr || (char*)optr >= ((char*)base)+*(base-1)) {
 			malloc_printf("base:%p ptr:%p len:%d\n", base, ptr, *(base-1));
 			ABORT4( ((((size_t)ptr)>>48) & 1) == 0 );
@@ -3376,10 +3390,16 @@ void* je_san_interior_checked(void *_base, void *_ptr) {
 	void *ptr = UNMASK(_ptr);
 	void *base = UNMASK(_base);
 	if (ptr == NULL || base == NULL) {
+		if (trace_fp) {
+			fprintf(trace_fp, "making interior1: ptr:%p base:%p\n", ptr, base);
+		}
 		return _MASK1(ptr);
 	}
 	unsigned *head = _je_san_get_base1(base);
 	if (head == NULL) {
+		if (trace_fp) {
+			fprintf(trace_fp, "making interior2: ptr:%p base:%p\n", ptr, base);
+		}
 		return _MASK1(ptr);
 	}
 
@@ -3402,10 +3422,16 @@ void* je_san_interior_must_check(void *_base, void *_ptr) {
 	void *ptr = UNMASK(_ptr);
 	void *base = UNMASK(_base);
 	if (ptr == NULL || base == NULL) {
+		if (trace_fp) {
+			fprintf(trace_fp, "making interior2: ptr:%p base:%p\n", ptr, base);
+		}
 		return _MASK1(ptr);
 	}
 	unsigned *head = _je_san_get_base1(base);
 	if (head == NULL) {
+		if (trace_fp) {
+			fprintf(trace_fp, "making interior3: ptr:%p base:%p\n", ptr, base);
+		}
 		return _MASK1(ptr);
 	}
 
@@ -4271,7 +4297,7 @@ void* je_san_copy_argv(int argc, char **argv) {
 	enable_masking = 1;
 	initialize_sections();
 	//print_data_section();
-	je_stack_begin = (char*)&argc;
+	je_stack_begin = (char*)argv;
 	assert(argc >= 1);
 	int i;
 	int argv_size = (argc + 1) * sizeof(char*);
