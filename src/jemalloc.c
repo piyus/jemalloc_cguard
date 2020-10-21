@@ -3147,6 +3147,14 @@ je_malloc(size_t size) {
 	void *ret = _je_malloc(size + OBJ_HEADER_SIZE);
 	assert(ret);
 	add_large_pointer(ret, size + OBJ_HEADER_SIZE);
+	if (trace_fp) {
+		static int reentry = 0;
+		if (reentry == 0) {
+			reentry = 1;
+			fprintf(trace_fp, "%s(): ptr:%p, size:%zd\n", __func__, ret, size);
+			reentry = 0;
+		}
+	}
 	return make_obj_header(ret, size, 0);
 }
 
