@@ -4368,6 +4368,28 @@ je_strtod(const char *_nptr, char **_endptr) {
 	return ret;
 }
 
+JEMALLOC_EXPORT
+long int
+je_strtol(const char *_nptr, char **_endptr, int base) {
+	unsigned long ret;
+	const char *nptr = (const char*)UNMASK(_nptr);
+	char **endptr = (char**)UNMASK(_endptr);
+
+	static long int (*fptr)(const char*, char**, int) = NULL;
+	if (fptr == NULL) {
+		fptr = get_func_addr("strtol", je_strtol);
+	}
+	ret = fptr(nptr, endptr, base);
+	if (endptr) {
+		if (*endptr == nptr) {
+			*endptr = (char*)_nptr;
+		}
+		else {
+			*endptr = _MASK(*endptr);
+		}
+	}
+	return ret;
+}
 
 JEMALLOC_EXPORT
 unsigned long
