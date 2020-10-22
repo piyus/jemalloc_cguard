@@ -4784,6 +4784,16 @@ je_aligned_alloc(size_t alignment, size_t _size) {
 	header->offset = offset;
 	ret -= OBJ_HEADER_SIZE;
 	ret = make_obj_header(ret, _size, 0);
+
+	if (trace_fp) {
+		static int reentry = 0;
+		if (reentry == 0) {
+			reentry = 1;
+			fprintf(trace_fp, "%s(): ptr:%p, size:%zd\n", __func__, ret, size);
+			reentry = 0;
+		}
+	}
+
 	return ret;
 
 #if 0
