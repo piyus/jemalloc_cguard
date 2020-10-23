@@ -3873,13 +3873,17 @@ const unsigned short** je___ctype_b_loc(void)
 	}
 	retptr = (unsigned short**)je_malloc(sizeof(unsigned short*));
 	assert(retptr);
+
+	unsigned short *ret;
 	size_t size = sizeof(unsigned short) * 384;
-	retptr[0] = (unsigned short*)je_malloc(size);
-	assert(retptr[0]);
+	ret = (unsigned short*)je_malloc(size);
+	assert(ret);
+
 	int** (*fptr)(void) = NULL;
 	fptr = get_func_addr("__ctype_b_loc", je___ctype_b_loc);
 	int **orig = fptr();
-	memcpy(retptr[0], orig[0], size);
+	memcpy(ret, orig[0]-128, size);
+	retptr[0] = (unsigned short*)_MASK(ret + 128);
 	return (const unsigned short**)retptr;
 }
 
@@ -3895,13 +3899,17 @@ const __int32_t** je___ctype_toupper_loc(void)
 	}
 	retptr = (int**)je_malloc(sizeof(int*));
 	assert(retptr);
+
+	int *ret;
 	size_t size = sizeof(int) * 384;
-	retptr[0] = (int*)je_malloc(size);
-	assert(retptr[0]);
+	ret = (int*)je_malloc(size);
+	assert(ret);
+
 	int** (*fptr)(void) = NULL;
 	fptr = get_func_addr("__ctype_toupper_loc", je___ctype_toupper_loc);
 	int **orig = fptr();
-	memcpy(retptr[0], orig[0], size);
+	memcpy(ret, orig[0]-128, size);
+	retptr[0] = (int*)_MASK(ret + 128);
 	return (const int**)retptr;
 }
 
@@ -3917,13 +3925,17 @@ const __int32_t** je___ctype_tolower_loc(void)
 	}
 	retptr = (int**)je_malloc(sizeof(int*));
 	assert(retptr);
+
+	int *ret;
 	size_t size = sizeof(int) * 384;
-	retptr[0] = (int*)je_malloc(size);
-	assert(retptr[0]);
+	ret = (int*)je_malloc(size);
+	assert(ret);
+
 	int** (*fptr)(void) = NULL;
 	fptr = get_func_addr("__ctype_tolower_loc", je___ctype_tolower_loc);
 	int **orig = fptr();
-	memcpy(retptr[0], orig[0], size);
+	memcpy(ret, orig[0]-128, size);
+	retptr[0] = (int*)_MASK(ret + 128);
 	return (const int**)retptr;
 }
 
