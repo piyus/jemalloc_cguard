@@ -2899,10 +2899,10 @@ void je_san_trace(char *_name, int line, int type, unsigned long long val1) {
 
 
 #define MAX_STACK_PTRS 102400
-static void *stack_ptrs[MAX_STACK_PTRS];
-static int num_stack_ptrs = 0;
-static void *callstack[MAX_STACK_PTRS];
-static int num_callstack = 0;
+static __thread void *stack_ptrs[MAX_STACK_PTRS];
+static __thread int num_stack_ptrs = 0;
+static __thread void *callstack[MAX_STACK_PTRS];
+static __thread int num_callstack = 0;
 
 JEMALLOC_EXPORT
 void* je_san_enter_scope() {
@@ -3800,6 +3800,23 @@ static void restore_varg(unsigned long long **fixes, unsigned long long *vals, i
 	}
 }
 
+
+JEMALLOC_EXPORT
+int je_pthread_create(pthread_t *_thread, const pthread_attr_t *_attr,
+                   void *(*start_routine) (void *), void *arg)
+{
+	pthread_t *thread = (pthread_t*)UNMASK(_thread);
+	const pthread_attr_t *attr = (const pthread_attr_t*)UNMASK(_attr);
+
+	int (*fptr)(pthread_t *, const pthread_attr_t *,
+              void *(*start_routine) (void *), void *) = NULL;
+	if (fptr == NULL) {
+		fptr = get_func_addr("pthread_create", je_pthread_create);
+		assert(fptr);
+	}
+	return fptr(thread, attr, start_routine, arg);
+}
+
 JEMALLOC_EXPORT
 int je_vsprintf(char *str, const char *format, va_list ap) {
 	unsigned long long *fixes[MAX_INTERIOR];
@@ -4234,20 +4251,21 @@ void je_san_abort2(void *base, void *cur, void *limit, void *ptrlimit, void *siz
 	if (cur < base) {
 		char *_base = (void*)UNMASK(base);
 		char *_cur = (void*)UNMASK(cur);
-		char *orig_base;
+		char *orig_base = je_san_get_base(_cur);
 		if (_cur < (char*)0x8000000) {
-			orig_base = _je_san_get_base(_cur);
-			if (!(orig_base + *((unsigned*)(orig_base+4)) + OBJ_HEADER_SIZE >= _base)) {
+			if (!(orig_base + *((unsigned*)(orig_base-4)) >= _base)) {
 				malloc_printf("orig_base:%p base:%p _base:%p _cur:%p cur:%p\n", orig_base, base, _base, _cur, cur);
 				if (orig_base != _base) {
 					assert(base != _base);
 				}
+				assert(0);
 			}
-			assert(orig_base + *((unsigned*)(orig_base+4)) + OBJ_HEADER_SIZE >= _base);
 		}
 		else {
-			orig_base = _je_san_get_base(_base);
 			if (orig_base != _base) {
+				if (base == _base) {
+					malloc_printf("orig_base:%p base:%p _base:%p _cur:%p cur:%p\n", orig_base, base, _base, _cur, cur);
+				}
 				assert(base != _base);
 			}
 		}
