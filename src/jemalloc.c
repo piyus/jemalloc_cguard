@@ -105,7 +105,9 @@ extent_interior_deregister1(tsdn_t *tsdn, rtree_ctx_t *rtree_ctx,
 
 
 static int enable_masking = 0;
-static char *je_stack_begin = NULL;
+static int stack_initialized = 0;
+static __thread char *je_stack_begin = NULL;
+
 #define MAX_LARGE_PTRS 102400
 //static void *large_ptrs[MAX_LARGE_PTRS];
 //static int num_large_ptrs = 0;
@@ -3022,10 +3024,22 @@ static void *get_global_header1(unsigned *ptr) {
 }
 
 static bool is_stack_ptr(char *ptr) {
-	if (!je_stack_begin) {
+	if (!stack_initialized) {
 		return false;
 	}
 	//assert(je_stack_begin != NULL);
+	if (je_stack_begin == NULL) {
+		pthread_attr_t attr;
+		void * stackaddr;
+		size_t stacksize;
+		pthread_t tid = pthread_self();
+
+		pthread_getattr_np(tid, &attr);
+		pthread_attr_getstack( &attr, &stackaddr, &stacksize );
+		je_stack_begin = ((char*)stackaddr) + stacksize;
+	}
+	assert(je_stack_begin);
+
 	char stack_var;
 	char *lower = &stack_var;
 	char *higher = je_stack_begin;
@@ -4305,6 +4319,7 @@ void* je_san_copy_argv(int argc, char **argv) {
 	enable_masking = 1;
 	initialize_sections();
 	//print_data_section();
+	stack_initialized = 1;
 	je_stack_begin = (char*)argv;
 	assert(argc >= 1);
 	int i;
