@@ -3154,13 +3154,14 @@ static void *_je_san_get_base1(void *ptr) {
 }
 
 static struct obj_header zero_obj = {MAGIC_NUMBER, 0, 0};
+static void *zero_obj_ptr = (void*)(&zero_obj + 1);
 
 JEMALLOC_EXPORT JEMALLOC_ALLOCATOR JEMALLOC_RESTRICT_RETURN
 void JEMALLOC_NOTHROW *
 JEMALLOC_ATTR(malloc) JEMALLOC_ALLOC_SIZE(1)
 je_malloc(size_t size) {
 	if (size == 0) {
-		return (void*)(&zero_obj + 1);
+		return zero_obj_ptr;
 	}
 	void *ret = _je_malloc(size + OBJ_HEADER_SIZE);
 	assert(ret);
@@ -3883,9 +3884,9 @@ const unsigned short** je___ctype_b_loc(void)
 	ret = (unsigned short*)je_malloc(size);
 	assert(ret);
 
-	int** (*fptr)(void) = NULL;
+	unsigned short** (*fptr)(void) = NULL;
 	fptr = get_func_addr("__ctype_b_loc", je___ctype_b_loc);
-	int **orig = fptr();
+	unsigned short **orig = fptr();
 	memcpy(ret, orig[0]-128, size);
 	retptr[0] = (unsigned short*)_MASK(ret + 128);
 	return (const unsigned short**)retptr;
@@ -5346,7 +5347,7 @@ _je_free(void *ptr) {
 JEMALLOC_EXPORT void JEMALLOC_NOTHROW
 je_free(void *_ptr) {
 	void *ptr = (void*)UNMASK(_ptr);
-	if (ptr == NULL || ptr == (void*)(&zero_obj + 1)) {
+	if (ptr == NULL || ptr == zero_obj_ptr) {
 		return;
 	}
 
