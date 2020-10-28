@@ -3410,7 +3410,7 @@ void* je_san_interior(void *_base, void *_ptr) {
 }
 
 JEMALLOC_EXPORT
-void* je_san_interior_checked(void *_base, void *_ptr) {
+void* je_san_interior_checked(void *_base, void *_ptr, size_t ptrsize) {
 	if (_base == _ptr) {
 		return _ptr;
 	}
@@ -3435,9 +3435,9 @@ void* je_san_interior_checked(void *_base, void *_ptr) {
 	unsigned size = head[1];
 	char *start = (char*)(head + 2);
 	char *end = start + size;
-	if (ptr < (void*)start || ptr >= (void*)end) {
+	if (ptr < (void*)start || ptr + ptrsize > (void*)end) {
 		if (trace_fp) {
-			fprintf(trace_fp, "making interior: start:%p ptr:%p base:%p size:%d end:%p\n", start, ptr, base, size, end);
+			fprintf(trace_fp, "making interior: start:%p ptr:%p base:%p size:%d end:%p ptrsize:%zd\n", start, ptr, base, size, end, ptrsize);
 		}
 		return _MASK1(ptr);
 	}
@@ -3445,7 +3445,7 @@ void* je_san_interior_checked(void *_base, void *_ptr) {
 }
 
 JEMALLOC_EXPORT
-void* je_san_interior_must_check(void *_base, void *_ptr) {
+void* je_san_interior_must_check(void *_base, void *_ptr, size_t ptrsize) {
 	void *ptr = UNMASK(_ptr);
 	void *base = UNMASK(_base);
 	if (ptr == NULL || base == NULL) {
@@ -3467,9 +3467,9 @@ void* je_san_interior_must_check(void *_base, void *_ptr) {
 	unsigned size = head[1];
 	char *start = (char*)(head + 2);
 	char *end = start + size;
-	if (ptr < (void*)start || ptr >= (void*)end) {
+	if (ptr < (void*)start || ptr + ptrsize > (void*)end) {
 		if (trace_fp) {
-			fprintf(trace_fp, "making interior: start:%p ptr:%p base:%p size:%d end:%p\n", start, ptr, base, size, end);
+			fprintf(trace_fp, "making interior: start:%p ptr:%p base:%p size:%d end:%p ptrsize:%zd\n", start, ptr, base, size, end, ptrsize);
 		}
 		return _MASK1(ptr);
 	}
