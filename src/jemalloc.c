@@ -31,8 +31,12 @@
 #define JE_ALIGN(x, y) (char*)(((size_t)(x) + ALIGN_PAD(y)) & ALIGN_MASK(y))
 
 static unsigned long long event_id = 1;
-//static unsigned long long min_events = 0; //1380498462ULL; //21498951ULL; //8600857659ULL; //0xffff4800000000ULL;
+//static unsigned long long min_events = 719000; //1380498462ULL; //21498951ULL; //8600857659ULL; //0xffff4800000000ULL;
 static unsigned long long min_events = 0xffff4800000000ULL;
+static int trace_count = 0;
+
+static int LastLine =  0;
+static char LastName[64];
 
 struct obj_header {
 	unsigned short magic;
@@ -50,6 +54,16 @@ static void abort3(const char *msg)
 		fclose(trace_fp);
 	}
 	assert(0);
+}
+
+static inline bool can_print_in_trace_fp() {
+	if ((event_id < min_events && trace_count <= 0) || !trace_fp) {
+		return false;
+	}
+	if (trace_count > 0) {
+		trace_count--;
+	}
+	return true;
 }
 
 #define ABORT4(x) ({ if (!(x)) { abort3(#x); }   })
@@ -2815,16 +2829,24 @@ static bool is_global(unsigned long long val) {
 #define PTR_TO_INT_TY 5
 #define SUB_TY 6
 
+static inline void
+set_trace_fp() {
+	if (trace_fp == NULL) {
+		trace_fp = fopen("trace.txt", "w");
+		assert(trace_fp != NULL);
+	}
+}
+
 
 JEMALLOC_EXPORT
 void je_san_trace(char *_name, int line, int type, unsigned long long val1) {
 	event_id++;
-	if (event_id < min_events /*&& !(type == ENTRY_TY || type == EXIT_TY)*/) {
+	if (can_print_in_trace_fp()/*&& !(type == ENTRY_TY || type == EXIT_TY)*/) {
 		return;
 	}
+	trace_count--;
 
 	static unsigned long long id = 0;
-	static FILE *err_fp = NULL;
 	char *name = UNMASK(_name);
 	unsigned long long val2 = (unsigned long long)UNMASK(val1);
 	unsigned long long val;
@@ -2843,12 +2865,6 @@ void je_san_trace(char *_name, int line, int type, unsigned long long val1) {
 	  val = 0;
 	}
 
-	if (trace_fp == NULL) {
-		trace_fp = fopen("trace.txt", "w");
-		assert(trace_fp != NULL);
-		err_fp = fopen("error.txt", "w");
-		assert(err_fp != NULL);
-	}
 
 	if (type == ENTRY_TY) {
 		fprintf(trace_fp, "[%lld] enter: %s():%d\n", id, name, line);
@@ -3166,7 +3182,7 @@ je_malloc(size_t size) {
 	void *ret = _je_malloc(size + OBJ_HEADER_SIZE);
 	assert(ret);
 	add_large_pointer(ret, size + OBJ_HEADER_SIZE);
-	if (trace_fp) {
+	if (can_print_in_trace_fp()) {
 		static int reentry = 0;
 		if (reentry == 0) {
 			reentry = 1;
@@ -3239,8 +3255,10 @@ void* je_san_page_fault_load(void *ptr, int line, char *name) {
 	event_id++;
 	//malloc_printf("1. store: ptr:%p val:%p\n", ptr, val);
 	void *optr = (void*)UNMASK(ptr);
+	strncpy(LastName, name, 64);
+	LastLine = line;
 
-	if (event_id > min_events || need_tracking(*((unsigned long long*)optr))) {
+	if (can_print_in_trace_fp()) {
 		name = (name < (char*)0x1000) ? null_name : UNMASK(name);
 		if (trace_fp) {
 			fprintf(trace_fp, "%lld load: ptr:%p val:%p %s():%d %d %d\n", 
@@ -3287,9 +3305,10 @@ JEMALLOC_EXPORT
 void* je_san_page_fault_store(void *ptr, void *val, int line, char *name) {
 	event_id++;
 	void *optr = (void*)UNMASK(ptr);
+	LastLine = line;
 
 	//void *oval = (void*)UNMASK(val);
-	if (event_id > min_events || need_tracking((unsigned long long)val)/* || oval < (void*)0x80000000*/) {
+	if (can_print_in_trace_fp()) {
 		name = (name < (char*)0x1000) ? null_name : UNMASK(name);
 		if (trace_fp) {
 			fprintf(trace_fp, "%lld store: ptr:%p val:%p %d %d %d\n", event_id, ptr, val, (line & 0xffff), (line>>16), line);
@@ -3417,14 +3436,14 @@ void* je_san_interior_checked(void *_base, void *_ptr, size_t ptrsize) {
 	void *ptr = UNMASK(_ptr);
 	void *base = UNMASK(_base);
 	if (ptr == NULL || base == NULL) {
-		if (trace_fp) {
+		if (can_print_in_trace_fp()) {
 			fprintf(trace_fp, "making interior1: ptr:%p base:%p\n", ptr, base);
 		}
 		return _MASK1(ptr);
 	}
 	unsigned *head = _je_san_get_base1(base);
 	if (head == NULL) {
-		if (trace_fp) {
+		if (can_print_in_trace_fp()) {
 			fprintf(trace_fp, "making interior2: ptr:%p base:%p\n", ptr, base);
 		}
 		return _MASK1(ptr);
@@ -3437,7 +3456,9 @@ void* je_san_interior_checked(void *_base, void *_ptr, size_t ptrsize) {
 	char *end = start + size;
 	if (ptr < (void*)start || ptr + ptrsize > (void*)end) {
 		if (trace_fp) {
-			fprintf(trace_fp, "making interior: start:%p ptr:%p base:%p size:%d end:%p ptrsize:%zd\n", start, ptr, base, size, end, ptrsize);
+			fprintf(trace_fp, "making interior: start:%p ptr:%p base:%p size:%d end:%p ptrsize:%zd lastline:%d lastname:%s\n", 
+				start, ptr, base, size, end, ptrsize, LastLine, LastName);
+			//trace_count = 10;
 		}
 		return _MASK1(ptr);
 	}
@@ -3449,14 +3470,14 @@ void* je_san_interior_must_check(void *_base, void *_ptr, size_t ptrsize) {
 	void *ptr = UNMASK(_ptr);
 	void *base = UNMASK(_base);
 	if (ptr == NULL || base == NULL) {
-		if (trace_fp) {
+		if (can_print_in_trace_fp()) {
 			fprintf(trace_fp, "making interior2: ptr:%p base:%p\n", ptr, base);
 		}
 		return _MASK1(ptr);
 	}
 	unsigned *head = _je_san_get_base1(base);
 	if (head == NULL) {
-		if (trace_fp) {
+		if (can_print_in_trace_fp()) {
 			fprintf(trace_fp, "making interior3: ptr:%p base:%p\n", ptr, base);
 		}
 		return _MASK1(ptr);
@@ -3469,7 +3490,9 @@ void* je_san_interior_must_check(void *_base, void *_ptr, size_t ptrsize) {
 	char *end = start + size;
 	if (ptr < (void*)start || ptr + ptrsize > (void*)end) {
 		if (trace_fp) {
-			fprintf(trace_fp, "making interior: start:%p ptr:%p base:%p size:%d end:%p ptrsize:%zd\n", start, ptr, base, size, end, ptrsize);
+			fprintf(trace_fp, "making interior: start:%p ptr:%p base:%p size:%d end:%p ptrsize:%zd lastline:%d lastname:%s\n", 
+				start, ptr, base, size, end, ptrsize, LastLine, LastName);
+			//trace_count = 10;
 		}
 		return _MASK1(ptr);
 	}
@@ -3481,7 +3504,7 @@ unsigned je_san_page_fault_len(void *ptr, int line, char *name) {
 	event_id++;
 	unsigned *optr = (unsigned*)UNMASK(ptr);
 
-	if (event_id > min_events) {
+	if (can_print_in_trace_fp()) {
 		//name = (name < (char*)0x1000) ? null_name : name;
 		//malloc_printf("%lld len: ptr:%p %s():%d %d %d\n", event_id, ptr, name, (line & 0xffff), (line>>16), line);
 		if (trace_fp) {
@@ -3493,7 +3516,7 @@ unsigned je_san_page_fault_len(void *ptr, int line, char *name) {
 	}
 
 	if (((((size_t)ptr)>>48) & 1) != 0 ) {
-		malloc_printf("%lld len: ptr:%p %d %d %d\n", event_id, ptr, (line & 0xffff), (line>>16), line);
+		malloc_printf("%lld len: ptr:%p %d %d %d name:%s\n", event_id, ptr, (line & 0xffff), (line>>16), line, name);
 	}
 	ABORT4( ((((size_t)ptr)>>48) & 1) == 0 );
 
@@ -4352,6 +4375,7 @@ void je_san_enable_mask() {
 JEMALLOC_EXPORT
 void* je_san_copy_argv(int argc, char **argv) {
 	enable_masking = 1;
+	set_trace_fp();
 	initialize_sections();
 	//print_data_section();
 	stack_initialized = 1;
@@ -4857,7 +4881,7 @@ je_aligned_alloc(size_t alignment, size_t _size) {
 	ret -= OBJ_HEADER_SIZE;
 	ret = make_obj_header(ret, _size, 0);
 
-	if (trace_fp) {
+	if (can_print_in_trace_fp()) {
 		static int reentry = 0;
 		if (reentry == 0) {
 			reentry = 1;
@@ -5351,7 +5375,7 @@ je_free(void *_ptr) {
 		return;
 	}
 
-	if (trace_fp) {
+	if (can_print_in_trace_fp()) {
 		static int reentry = 0;
 		if (reentry == 0) {
 			reentry = 1;
