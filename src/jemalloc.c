@@ -31,7 +31,7 @@
 #define JE_ALIGN(x, y) (char*)(((size_t)(x) + ALIGN_PAD(y)) & ALIGN_MASK(y))
 
 static unsigned long long event_id = 1;
-//static unsigned long long min_events = 719000; //1380498462ULL; //21498951ULL; //8600857659ULL; //0xffff4800000000ULL;
+//static unsigned long long min_events = 0; //1380498462ULL; //21498951ULL; //8600857659ULL; //0xffff4800000000ULL;
 static unsigned long long min_events = 0xffff4800000000ULL;
 static int trace_count = 0;
 
@@ -3464,6 +3464,40 @@ void* je_san_interior_checked(void *_base, void *_ptr, size_t ptrsize) {
 	}
 	return _MASK(_ptr);
 }
+
+JEMALLOC_EXPORT
+void* je_san_check_size(void *_ptr, size_t ptrsize) {
+	void *ptr = UNMASK(_ptr);
+	if (ptr == NULL) {
+		if (can_print_in_trace_fp()) {
+			fprintf(trace_fp, "making interior2: ptr:%p\n", ptr);
+		}
+		return _MASK1(ptr);
+	}
+	unsigned *head = _je_san_get_base1(ptr);
+	if (head == NULL) {
+		if (can_print_in_trace_fp()) {
+			fprintf(trace_fp, "making interior3: ptr:%p\n", ptr);
+		}
+		return _MASK1(ptr);
+	}
+
+	assert(IS_MAGIC(head[0]));
+
+	unsigned size = head[1];
+	char *start = (char*)(head + 2);
+	char *end = start + size;
+	if (ptr + ptrsize > (void*)end) {
+		if (trace_fp) {
+			fprintf(trace_fp, "making interior: start:%p ptr:%p size:%d end:%p ptrsize:%zd lastline:%d lastname:%s\n", 
+				start, ptr, size, end, ptrsize, LastLine, LastName);
+			//trace_count = 10;
+		}
+		return _MASK1(ptr);
+	}
+	return _ptr;
+}
+
 
 JEMALLOC_EXPORT
 void* je_san_interior_must_check(void *_base, void *_ptr, size_t ptrsize) {
