@@ -3591,6 +3591,11 @@ unsigned je_san_page_fault_len(void *ptr, int line, char *name) {
 	return *optr;
 }
 
+JEMALLOC_EXPORT
+void* je_san_page_fault_limit(void *ptr, int line, char *name) {
+	return ptr + je_san_page_fault_len(ptr-4, line, name);
+}
+
 #if 0
 struct fooalign {char x; double d;};
 #define DEFAULT_ALIGNMENT  \
@@ -4319,7 +4324,7 @@ static void myfunc3(void)
 #endif
 
 JEMALLOC_EXPORT
-void je_san_abort2(void *base, void *cur, void *limit, void *ptrlimit, void *size, void *callsite) {
+void je_san_abort2(void *base, void *cur, void *limit, void *ptrlimit, void *callsite) {
 	if (UNMASK(base) < (char*)0x80000000 /*|| is_stack_ptr(UNMASK(base))*/) {
 		//return;
 	}
@@ -4357,14 +4362,14 @@ void je_san_abort2(void *base, void *cur, void *limit, void *ptrlimit, void *siz
 	char *end = (char*)_base + len;
 	if (trace_fp) {
 		fprintf(trace_fp, "%lld base:%p cur:%p len:%d magic:%x end:%p\n"
-						          "limit:%p ptrlimit:%p size:%p callsite:%p\n",
-						          event_id, base, cur, len, magic, end, limit, ptrlimit, size, callsite);
+						          "limit:%p ptrlimit:%p callsite:%p\n",
+						          event_id, base, cur, len, magic, end, limit, ptrlimit, callsite);
 		fprintf(trace_fp, "head:%p head0:%x head1:%x\n", head, head[0], head[1]);
 	}
 	else {
 		malloc_printf("%lld base:%p cur:%p len:%d magic:%x end:%p\n"
-									"limit:%p ptrlimit:%p size:%p callsite:%p\n",
-									event_id, base, cur, len, magic, end, limit, ptrlimit, size, callsite);
+									"limit:%p ptrlimit:%p callsite:%p\n",
+									event_id, base, cur, len, magic, end, limit, ptrlimit, callsite);
 		malloc_printf("head:%p head0:%x head1:%x\n", head, head[0], head[1]);
 		myfunc3();
 	}
