@@ -3457,8 +3457,8 @@ void* je_san_interior_checked(void *_base, void *_ptr, size_t ptrsize) {
 				start, ptr, base, size, end, ptrsize, LastLine, LastName);
 			//trace_count = 10;
 		}
-		if (ptrsize == 224 || ptrsize == 96 || (size == 16 && ptrsize==24) || ptrsize==64 || ptrsize == 48 || ptrsize == 4)
-			abort3("hi");
+		//if (ptrsize == 224 || ptrsize == 96 || (size == 16 && ptrsize==24) || ptrsize==64 || ptrsize == 48 || ptrsize == 4)
+			//abort3("hi");
 		return _MASK1(ptr);
 	}
 	return _MASK(_ptr);
@@ -3492,8 +3492,8 @@ void* je_san_check_size(void *_ptr, size_t ptrsize) {
 				start, ptr, size, end, ptrsize, LastLine, LastName);
 			//trace_count = 10;
 		}
-		if (ptrsize == 224 || ptrsize == 96 || (size == 16 && ptrsize==24) || ptrsize==64 || ptrsize==48 || ptrsize==4)
-			abort3("hi");
+		//if (ptrsize == 224 || ptrsize == 96 || (size == 16 && ptrsize==24) || ptrsize==64 || ptrsize==48 || ptrsize==4)
+			//abort3("hi");
 		return _MASK1(ptr);
 	}
 	return _ptr;
