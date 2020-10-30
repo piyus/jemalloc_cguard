@@ -31,7 +31,7 @@
 #define JE_ALIGN(x, y) (char*)(((size_t)(x) + ALIGN_PAD(y)) & ALIGN_MASK(y))
 
 static unsigned long long event_id = 1;
-//static unsigned long long min_events = 0; //1380498462ULL; //21498951ULL; //8600857659ULL; //0xffff4800000000ULL;
+//static unsigned long long min_events = 2500110962; //1380498462ULL; //21498951ULL; //8600857659ULL; //0xffff4800000000ULL;
 static unsigned long long min_events = 0xffff4800000000ULL;
 static int trace_count = 0;
 
@@ -49,7 +49,7 @@ static FILE *trace_fp = NULL;
 static void abort3(const char *msg)
 {
 	if (trace_fp) {
-		fprintf(trace_fp, "%s\n", msg);
+		fprintf(trace_fp, "event_id:%lld %s\n", event_id, msg);
 		syncfs(fileno(trace_fp));
 		fclose(trace_fp);
 	}
@@ -3169,20 +3169,17 @@ static void *_je_san_get_base1(void *ptr) {
 	return head;
 }
 
-static struct obj_header zero_obj = {MAGIC_NUMBER, 0, 0};
-static void *zero_obj_ptr = (void*)(&zero_obj + 1);
-
 JEMALLOC_EXPORT JEMALLOC_ALLOCATOR JEMALLOC_RESTRICT_RETURN
 void JEMALLOC_NOTHROW *
 JEMALLOC_ATTR(malloc) JEMALLOC_ALLOC_SIZE(1)
 je_malloc(size_t size) {
 	if (size == 0) {
-		return zero_obj_ptr;
+		return NULL;
 	}
 	void *ret = _je_malloc(size + OBJ_HEADER_SIZE);
 	assert(ret);
 	add_large_pointer(ret, size + OBJ_HEADER_SIZE);
-	if (can_print_in_trace_fp()) {
+	if (trace_fp || can_print_in_trace_fp()) {
 		static int reentry = 0;
 		if (reentry == 0) {
 			reentry = 1;
@@ -3460,6 +3457,8 @@ void* je_san_interior_checked(void *_base, void *_ptr, size_t ptrsize) {
 				start, ptr, base, size, end, ptrsize, LastLine, LastName);
 			//trace_count = 10;
 		}
+		if (ptrsize == 224 || ptrsize == 96 || (size == 16 && ptrsize==24) || ptrsize==64 || ptrsize == 48 || ptrsize == 4)
+			abort3("hi");
 		return _MASK1(ptr);
 	}
 	return _MASK(_ptr);
@@ -3493,6 +3492,8 @@ void* je_san_check_size(void *_ptr, size_t ptrsize) {
 				start, ptr, size, end, ptrsize, LastLine, LastName);
 			//trace_count = 10;
 		}
+		if (ptrsize == 224 || ptrsize == 96 || (size == 16 && ptrsize==24) || ptrsize==64 || ptrsize==48 || ptrsize==4)
+			abort3("hi");
 		return _MASK1(ptr);
 	}
 	return _ptr;
@@ -5405,7 +5406,7 @@ _je_free(void *ptr) {
 JEMALLOC_EXPORT void JEMALLOC_NOTHROW
 je_free(void *_ptr) {
 	void *ptr = (void*)UNMASK(_ptr);
-	if (ptr == NULL || ptr == zero_obj_ptr) {
+	if (ptr == NULL) {
 		return;
 	}
 
