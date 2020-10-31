@@ -3538,6 +3538,8 @@ JEMALLOC_EXPORT
 unsigned je_san_page_fault_len(void *ptr, int line, char *name) {
 	event_id++;
 	unsigned *optr = (unsigned*)UNMASK(ptr);
+	char *orig = (char*)(optr + 1);
+	unsigned offset = 0;
 
 	if (can_print_in_trace_fp()) {
 		//name = (name < (char*)0x1000) ? null_name : name;
@@ -3581,6 +3583,7 @@ unsigned je_san_page_fault_len(void *ptr, int line, char *name) {
 			assert(ptr != (void*)optr);
 		//}
 		optr = head + 1;
+		offset = (unsigned)(orig - ((char*)(optr+1)));
 	}
 	else {
 		if (ptr != optr) {
@@ -3588,7 +3591,7 @@ unsigned je_san_page_fault_len(void *ptr, int line, char *name) {
 		}
 		//assert(ptr == (void*)optr);
 	}
-	return *optr;
+	return (*optr) - offset;
 }
 
 JEMALLOC_EXPORT
