@@ -3603,6 +3603,9 @@ void* je_san_page_fault_limit(void *ptr, int line, char *name) {
 
 JEMALLOC_EXPORT
 void je_san_check2(void *_ptr1, void *_ptr2, size_t ptrsize) {
+	if (ptrsize == 0) {
+		return;
+	}
 	void *limit1 = je_san_page_fault_limit(_ptr1, 0, "");
 	void *limit2 = je_san_page_fault_limit(_ptr2, 0, "");
 	assert(ptrsize <= (size_t)((char*)limit1 - (char*)_ptr1));
@@ -3611,8 +3614,12 @@ void je_san_check2(void *_ptr1, void *_ptr2, size_t ptrsize) {
 
 JEMALLOC_EXPORT
 void je_san_check1(void *_ptr1, size_t ptrsize) {
+	if (ptrsize == 0) {
+		return;
+	}
 	void *limit1 = je_san_page_fault_limit(_ptr1, 0, "");
-	assert(ptrsize <= (size_t)((char*)limit1 - (char*)_ptr1));
+	size_t size = (size_t)((char*)limit1 - (char*)_ptr1);
+	assert(ptrsize <= size);
 }
 
 JEMALLOC_EXPORT
@@ -3624,6 +3631,12 @@ void je_san_check3(void *_ptr1, void *_ptr2) {
 	size_t len = strlen(UNMASK(_ptr2)) + 1;
 	assert(len <= size2);
 	assert(len <= size1);
+}
+
+JEMALLOC_EXPORT
+void je_san_check4(void *_ptr1, size_t ptrsize) {
+	void *limit1 = je_san_page_fault_limit(_ptr1, 0, "");
+	assert(ptrsize +1 <= (size_t)((char*)limit1 - (char*)_ptr1));
 }
 
 #if 0
@@ -3682,6 +3695,25 @@ static void *get_func_addr(const char *name, void *wrapper) {
 	assert(addr);
   return addr;
 }
+
+JEMALLOC_EXPORT
+struct tm *je_localtime(const time_t *timep) {
+	static struct tm* ret = NULL;
+	if (ret == NULL) {
+		ret = je_malloc(sizeof(struct tm));
+		assert(ret);
+	}
+
+	static struct tm* (*fptr)(const time_t*) = NULL;
+	if (fptr == NULL) {
+		fptr = get_func_addr("localtime", je_localtime);
+		assert(fptr);
+	}
+	struct tm* ret1 = fptr(timep);
+	memcpy(ret, ret1, sizeof(struct tm));
+	return ret;
+}
+
 
 JEMALLOC_EXPORT
 ssize_t je___getdelim(char **_lineptr, size_t *_n, int delim, FILE *_stream)
