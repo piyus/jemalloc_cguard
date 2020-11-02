@@ -50,6 +50,16 @@ static bool is_invalid_ptr(size_t ptr) {
 	return (ptr >> 48) & 1;
 }
 
+static size_t get_offset_from_ptr(size_t ptr) {
+	return ptr >> 49;
+}
+
+static size_t get_interior(size_t ptr, size_t offset) {
+	ptr = (ptr << 15) >> 15;
+	ptr |= (offset << 49);
+	return ptr;
+}
+
 
 static void abort3(const char *msg)
 {
@@ -3203,7 +3213,8 @@ void* je_san_get_base(void *ptr) {
 	struct obj_header *h = _je_san_get_base(ptr1);
 	//malloc_printf("%lld ptr:%p ptr1:%p h:%p sz:%d\n", counter, ptr, ptr1, h+1, h->size);
 	if (ptr != ptr1) {
-		h = (struct obj_header*)_MASK(h);
+		size_t offset = get_offset_from_ptr((size_t)ptr);
+		h = (struct obj_header*)get_interior((size_t)h, offset);
 	}
 	if (ptr1 == (void*)(h+1)) {
 		counter++;
@@ -3218,7 +3229,9 @@ char* je_san_make_interior(char *ptr) {
 	assert(optr != ptr);
 	char *base = (char*)_je_san_get_base(ptr);
 	if (base != ptr) {
-		return _MASK(ptr);
+		if (ptr > base) {
+			return (char*)get_interior((size_t)ptr, (size_t)(ptr-base));
+		}
 	}
 	return ptr;
 }
