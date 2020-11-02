@@ -3603,6 +3603,7 @@ void* je_san_page_fault_limit(void *ptr, int line, char *name) {
 
 JEMALLOC_EXPORT
 void je_san_check2(void *_ptr1, void *_ptr2, size_t ptrsize) {
+#if 0
 	if (ptrsize == 0) {
 		return;
 	}
@@ -3610,20 +3611,24 @@ void je_san_check2(void *_ptr1, void *_ptr2, size_t ptrsize) {
 	void *limit2 = je_san_page_fault_limit(_ptr2, 0, "");
 	assert(ptrsize <= (size_t)((char*)limit1 - (char*)_ptr1));
 	assert(ptrsize <= (size_t)((char*)limit2 - (char*)_ptr2));
+#endif
 }
 
 JEMALLOC_EXPORT
 void je_san_check1(void *_ptr1, size_t ptrsize) {
+#if 0
 	if (ptrsize == 0) {
 		return;
 	}
 	void *limit1 = je_san_page_fault_limit(_ptr1, 0, "");
 	size_t size = (size_t)((char*)limit1 - (char*)_ptr1);
 	assert(ptrsize <= size);
+#endif
 }
 
 JEMALLOC_EXPORT
 void je_san_check3(void *_ptr1, void *_ptr2) {
+#if 0
 	void *limit1 = je_san_page_fault_limit(_ptr1, 0, "");
 	void *limit2 = je_san_page_fault_limit(_ptr2, 0, "");
 	size_t size1 = (size_t)((char*)limit1 - (char*)_ptr1);
@@ -3631,12 +3636,13 @@ void je_san_check3(void *_ptr1, void *_ptr2) {
 	size_t len = strlen(UNMASK(_ptr2)) + 1;
 	assert(len <= size2);
 	assert(len <= size1);
+#endif
 }
 
 JEMALLOC_EXPORT
 void je_san_check4(void *_ptr1, size_t ptrsize) {
-	void *limit1 = je_san_page_fault_limit(_ptr1, 0, "");
-	assert(ptrsize +1 <= (size_t)((char*)limit1 - (char*)_ptr1));
+	//void *limit1 = je_san_page_fault_limit(_ptr1, 0, "");
+	//assert(ptrsize +1 <= (size_t)((char*)limit1 - (char*)_ptr1));
 }
 
 #if 0
