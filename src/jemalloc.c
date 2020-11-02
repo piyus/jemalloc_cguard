@@ -151,7 +151,6 @@ static __thread char *je_stack_begin = NULL;
 #define TRACK_SHIFT 48
 #define UNMASK(x) ((char*)((((uint64_t)(x)) & 0xffffffffffffULL)))
 //#define _MASK(x) (char*)(x) //((char*)((((uint64_t)(x)) | (INTERIOR_STR << 48))))
-#define _MASK(x) ((enable_masking) ? ((char*)((((uint64_t)(x)) | (INTERIOR_STR << 48)))) : (char*)(x))
 #define _MASK1(x) ((enable_masking) ? ((char*)((((uint64_t)(x)) | (1ULL << 48)))) : (char*)(x))
 #define _MASK2(x) ((enable_masking) ? ((char*)((((uint64_t)(x)) | (0xFFFEULL << 48)))) : (char*)(x))
 
@@ -3561,7 +3560,7 @@ void* je_san_interior_must_check(void *_base, void *_ptr, size_t ptrsize) {
 		}
 		return _MASK1(ptr);
 	}
-	return _MASK(_ptr);
+	return (char*)get_interior((size_t)ptr, (size_t)((char*)ptr-start));
 }
 
 JEMALLOC_EXPORT
