@@ -133,6 +133,7 @@ static __thread char *je_stack_begin = NULL;
 //#define _MASK(x) (char*)(x) //((char*)((((uint64_t)(x)) | (INTERIOR_STR << 48))))
 #define _MASK(x) ((enable_masking) ? ((char*)((((uint64_t)(x)) | (INTERIOR_STR << 48)))) : (char*)(x))
 #define _MASK1(x) ((enable_masking) ? ((char*)((((uint64_t)(x)) | (1ULL << 48)))) : (char*)(x))
+#define _MASK2(x) ((enable_masking) ? ((char*)((((uint64_t)(x)) | (0xFFFEULL << 48)))) : (char*)(x))
 
 #include "qsort.c"
 
@@ -4019,7 +4020,7 @@ const unsigned short** je___ctype_b_loc(void)
 	fptr = get_func_addr("__ctype_b_loc", je___ctype_b_loc);
 	unsigned short **orig = fptr();
 	memcpy(ret, orig[0]-128, size);
-	retptr[0] = (unsigned short*)_MASK(ret + 128);
+	retptr[0] = (unsigned short*)_MASK2(ret + 128);
 	return (const unsigned short**)retptr;
 }
 
@@ -4045,7 +4046,7 @@ const __int32_t** je___ctype_toupper_loc(void)
 	fptr = get_func_addr("__ctype_toupper_loc", je___ctype_toupper_loc);
 	int **orig = fptr();
 	memcpy(ret, orig[0]-128, size);
-	retptr[0] = (int*)_MASK(ret + 128);
+	retptr[0] = (int*)_MASK2(ret + 128);
 	return (const int**)retptr;
 }
 
@@ -4071,7 +4072,7 @@ const __int32_t** je___ctype_tolower_loc(void)
 	fptr = get_func_addr("__ctype_tolower_loc", je___ctype_tolower_loc);
 	int **orig = fptr();
 	memcpy(ret, orig[0]-128, size);
-	retptr[0] = (int*)_MASK(ret + 128);
+	retptr[0] = (int*)_MASK2(ret + 128);
 	return (const int**)retptr;
 }
 
@@ -4157,9 +4158,9 @@ void je_obstack_free(struct obstack *h, void *_obj) {
       h->object_base = h->next_free = obj;
       h->chunk_limit = lp->limit;
       h->chunk = lp;
-			h->next_free = _MASK(h->next_free);
-			h->object_base = _MASK(h->object_base);
-			h->chunk_limit = _MASK(h->chunk_limit);
+			h->next_free = _MASK2(h->next_free);
+			h->object_base = _MASK2(h->object_base);
+			h->chunk_limit = _MASK2(h->chunk_limit);
     }
   else if (obj != 0)
     /* obj is not in any of the chunks! */
@@ -4195,12 +4196,12 @@ void je__obstack_newchunk(struct obstack *h, int length) {
 		fptr = get_func_addr("_obstack_newchunk", je__obstack_newchunk);
 	}
 	fptr(h, length);
-	h->next_free = _MASK(h->next_free);
-	h->object_base = _MASK(h->object_base);
-	h->chunk_limit = _MASK(h->chunk_limit);
-	h->chunk->limit = _MASK(h->chunk->limit);
+	h->next_free = _MASK2(h->next_free);
+	h->object_base = _MASK2(h->object_base);
+	h->chunk_limit = _MASK2(h->chunk_limit);
+	h->chunk->limit = _MASK2(h->chunk->limit);
 	if (h->chunk->prev == old_chunk) {
-		old_chunk->limit = _MASK(old_chunk->limit);
+		old_chunk->limit = _MASK2(old_chunk->limit);
 	}
 	return;
 
@@ -4304,10 +4305,10 @@ int je__obstack_begin (struct obstack *h, int size, int alignment,
 	}
 	int ret = fptr(h, size, alignment, chunkfun, freefun);
 
-	h->next_free = _MASK(h->next_free);
-	h->object_base = _MASK(h->object_base);
-	h->chunk_limit = _MASK(h->chunk_limit);
-	h->chunk->limit = _MASK(h->chunk->limit);
+	h->next_free = _MASK2(h->next_free);
+	h->object_base = _MASK2(h->object_base);
+	h->chunk_limit = _MASK2(h->chunk_limit);
+	h->chunk->limit = _MASK2(h->chunk->limit);
 
 	//register_obstack(h);
 
@@ -4517,7 +4518,7 @@ char *je_strstr(const char *_haystack, const char *_needle) {
   if (len1 < len2) return NULL;
   for (size_t pos = 0; pos <= len1 - len2; pos++) {
     if (memcmp(haystack + pos, needle, len2) == 0)
-      return (pos == 0) ? (char*)_haystack : (char*)_MASK((haystack + pos));
+      return (pos == 0) ? (char*)_haystack : (char*)_MASK2((haystack + pos));
   }
   return NULL;
 }
@@ -4544,7 +4545,7 @@ je_strtod(const char *_nptr, char **_endptr) {
 			*endptr = (char*)_nptr;
 		}
 		else {
-			*endptr = _MASK(*endptr);
+			*endptr = _MASK2(*endptr);
 		}
 	}
 	return ret;
@@ -4567,7 +4568,7 @@ je_strtol(const char *_nptr, char **_endptr, int base) {
 			*endptr = (char*)_nptr;
 		}
 		else {
-			*endptr = _MASK(*endptr);
+			*endptr = _MASK2(*endptr);
 		}
 	}
 	return ret;
@@ -4590,7 +4591,7 @@ je_strtoul(const char *_nptr, char **_endptr, int base) {
 			*endptr = (char*)_nptr;
 		}
 		else {
-			*endptr = _MASK(*endptr);
+			*endptr = _MASK2(*endptr);
 		}
 	}
 	return ret;
@@ -4647,7 +4648,7 @@ je_strtoul(const char *_nptr, char **_endptr, int base) {
 	} else if (neg)
 		acc = -acc;
 	if (endptr != 0) {
-		*endptr = (char *) (any ? _MASK(s - 1) : _nptr);
+		*endptr = (char *) (any ? _MASK2(s - 1) : _nptr);
 	}
 	return (acc);
 #endif
@@ -4665,7 +4666,7 @@ char* je_strchr(const char *_s, int c) {
 	s++;
   while (true) {
     if (*s == (char)c)
-      return (char*)(_MASK(s));
+      return (char*)(_MASK2(s));
     if (*s == 0)
       return NULL;
     s++; 
@@ -4696,11 +4697,11 @@ je_strtok(char *_s, const char *delim)
   end = s + strcspn (s, delim);
   if (*end == '\0')
     {
-      return (s == _s) ? _s : _MASK(s);
+      return (s == _s) ? _s : _MASK2(s);
     }
   /* Terminate the token and make *SAVE_PTR point past it.  */
   *end = '\0';
-  return (s == _s) ? _s : _MASK(s);
+  return (s == _s) ? _s : _MASK2(s);
 }
 
 
@@ -4810,7 +4811,7 @@ je_memchr(void const *_s, int c_in, size_t n)
 	}
 	ret = fptr(s, c_in, n);
 	if (ret && ret != (void*)_s) {
-		ret = (void*)_MASK(ret);
+		ret = (void*)_MASK2(ret);
 	}
 	return ret;
 
@@ -4877,7 +4878,7 @@ void* je_memchr(const void *_s, int c, size_t n) {
 	size_t i;
   for (i = 0; i < n; i++) {
     if (s[i] == (char)c) {
-      return (i == 0) ? (void*)_s : (void*)(_MASK(&s[i]));
+      return (i == 0) ? (void*)_s : (void*)(_MASK2(&s[i]));
 		}
   }
 	return NULL;
@@ -4891,7 +4892,7 @@ char *je_strrchr(const char *_s, int c) {
   for (int i = 0; s[i]; i++) {
     if (s[i] == c) res = s + i;
   }
-  return (res == s) ? (char*)(_s) : (char *)(_MASK(res));
+  return (res == s) ? (char*)(_s) : (char *)(_MASK2(res));
 }
 
 JEMALLOC_EXPORT
