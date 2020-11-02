@@ -54,7 +54,12 @@ static size_t get_offset_from_ptr(size_t ptr) {
 	return ptr >> 49;
 }
 
+#define MAX_OFFSET ((1ULL<<15) - 1)
+
 static size_t get_interior(size_t ptr, size_t offset) {
+	if (offset > MAX_OFFSET) {
+		offset = MAX_OFFSET;
+	}
 	ptr = (ptr << 15) >> 15;
 	ptr |= (offset << 49);
 	return ptr;
@@ -3441,7 +3446,7 @@ void* je_san_interior(void *_base, void *_ptr) {
 	if (_base == _ptr) {
 		return _base;
 	}
-	return _MASK(_ptr);
+	return (char*)get_interior((size_t)_ptr, (size_t)(_ptr-_base));
 }
 
 
