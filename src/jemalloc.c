@@ -46,6 +46,11 @@ struct obj_header {
 
 static FILE *trace_fp = NULL;
 
+static bool is_invalid_ptr(size_t ptr) {
+	return (ptr >> 48) & 1;
+}
+
+
 static void abort3(const char *msg)
 {
 	if (trace_fp) {
@@ -3475,8 +3480,13 @@ void* je_san_check_size(void *_ptr, size_t ptrsize) {
 		}
 		return _MASK1(ptr);
 	}
+	if (ptr < MinGlobalAddr || is_invalid_ptr((size_t)_ptr)) {
+		return _MASK1(ptr);
+	}
+
 	unsigned *head = _je_san_get_base1(ptr);
 	if (head == NULL) {
+		assert(0);
 		if (can_print_in_trace_fp()) {
 			fprintf(trace_fp, "making interior3: ptr:%p\n", ptr);
 		}
