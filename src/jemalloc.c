@@ -3457,7 +3457,7 @@ void* je_san_interior_checked(void *_base, void *_ptr, size_t ptrsize) {
 	}
 	void *ptr = UNMASK(_ptr);
 	void *base = UNMASK(_base);
-	if (ptr == NULL || base == NULL) {
+	if (ptr == NULL || base == NULL || is_invalid_ptr((size_t)_base)) {
 		if (can_print_in_trace_fp()) {
 			fprintf(trace_fp, "making interior1: ptr:%p base:%p\n", ptr, base);
 		}
@@ -3486,7 +3486,7 @@ void* je_san_interior_checked(void *_base, void *_ptr, size_t ptrsize) {
 			//abort3("hi");
 		return _MASK1(ptr);
 	}
-	return _MASK(_ptr);
+	return (char*)get_interior((size_t)ptr, (size_t)((char*)ptr-start));
 }
 
 JEMALLOC_EXPORT
