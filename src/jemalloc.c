@@ -4795,7 +4795,7 @@ je_putenv(char *_name)
 	return fptr(name);
 }
 
-#define GET_INTERIOR(x, y) ((x == NULL || ((void*)(x) == (void*)(y))) ? (void*)(x) : (void*)_MASK(x))
+#define GET_INTERIOR(x, y) ((x == NULL || ((void*)(x) == (void*)(y))) ? (void*)(x) : (void*)_MASK2(x))
 
 JEMALLOC_EXPORT
 void *
