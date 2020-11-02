@@ -4400,7 +4400,7 @@ void je_san_abort2(void *base, void *cur, void *limit, void *ptrlimit, void *cal
 	if (cur < base) {
 		char *_base = (void*)UNMASK(base);
 		char *_cur = (void*)UNMASK(cur);
-		char *orig_base = je_san_get_base(_cur);
+		char *orig_base = _je_san_get_base(_cur) + 8;
 		if (_cur < (char*)0x8000000) {
 			if (!(orig_base + *((unsigned*)(orig_base-4)) >= _base)) {
 				malloc_printf("orig_base:%p base:%p _base:%p _cur:%p cur:%p\n", orig_base, base, _base, _cur, cur);
