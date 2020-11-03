@@ -3171,6 +3171,26 @@ static void *_je_san_get_base3(void *ptr) {
 	return head;
 }
 
+JEMALLOC_EXPORT
+void* je_san_interior(void *_base, void *_ptr) {
+	size_t mask = (((size_t)_base) ^ ((size_t)_ptr)) >> 48;
+	assert(mask == 0);
+	if (_base == _ptr) {
+		return _base;
+	}
+	if (can_print_in_trace_fp()) {
+		fprintf(trace_fp, "%s: ptr:%p base:%p\n", __func__, _ptr, _base);
+	}
+	return (char*)get_interior_add((size_t)_ptr, (size_t)(_ptr-_base));
+}
+
+
+static void *ptr_to_iptr(void *_ptr) {
+	void *ptr = UNMASK(_ptr);
+	void *base = _je_san_get_base3(ptr) + 8;
+	return je_san_interior(base, ptr);
+}
+
 static void *__je_san_get_base1(void *ptr) {
 	if (ptr < MinGlobalAddr) {
 		return NULL;
@@ -3476,19 +3496,6 @@ void* je_san_page_fault_call(void *ptr, int line, char *name) {
 
 static void print_all_obstack();
 
-
-JEMALLOC_EXPORT
-void* je_san_interior(void *_base, void *_ptr) {
-	size_t mask = (((size_t)_base) ^ ((size_t)_ptr)) >> 48;
-	assert(mask == 0);
-	if (_base == _ptr) {
-		return _base;
-	}
-	if (can_print_in_trace_fp()) {
-		fprintf(trace_fp, "%s: ptr:%p base:%p\n", __func__, _ptr, _base);
-	}
-	return (char*)get_interior_add((size_t)_ptr, (size_t)(_ptr-_base));
-}
 
 static
 void* je_san_interior1(const void *_base, const void *_ptr) {
@@ -4242,12 +4249,9 @@ void je_obstack_free(struct obstack *h, void *_obj) {
     }
   if (lp)
     {
-      h->object_base = h->next_free = obj;
-      h->chunk_limit = lp->limit;
+      h->object_base = h->next_free = ptr_to_iptr(obj);
+      h->chunk_limit = ptr_to_iptr(lp->limit);
       h->chunk = lp;
-			h->next_free = _MASK2(h->next_free);
-			h->object_base = _MASK2(h->object_base);
-			h->chunk_limit = _MASK2(h->chunk_limit);
     }
   else if (obj != 0)
     /* obj is not in any of the chunks! */
@@ -4283,12 +4287,12 @@ void je__obstack_newchunk(struct obstack *h, int length) {
 		fptr = get_func_addr("_obstack_newchunk", je__obstack_newchunk);
 	}
 	fptr(h, length);
-	h->next_free = _MASK2(h->next_free);
-	h->object_base = _MASK2(h->object_base);
-	h->chunk_limit = _MASK2(h->chunk_limit);
-	h->chunk->limit = _MASK2(h->chunk->limit);
+	h->next_free = ptr_to_iptr(h->next_free);
+	h->object_base = ptr_to_iptr(h->object_base);
+	h->chunk_limit = ptr_to_iptr(h->chunk_limit);
+	h->chunk->limit = ptr_to_iptr(h->chunk->limit);
 	if (h->chunk->prev == old_chunk) {
-		old_chunk->limit = _MASK2(old_chunk->limit);
+		old_chunk->limit = ptr_to_iptr(old_chunk->limit);
 	}
 	return;
 
@@ -4392,10 +4396,10 @@ int je__obstack_begin (struct obstack *h, int size, int alignment,
 	}
 	int ret = fptr(h, size, alignment, chunkfun, freefun);
 
-	h->next_free = _MASK2(h->next_free);
-	h->object_base = _MASK2(h->object_base);
-	h->chunk_limit = _MASK2(h->chunk_limit);
-	h->chunk->limit = _MASK2(h->chunk->limit);
+	h->next_free = ptr_to_iptr(h->next_free);
+	h->object_base = ptr_to_iptr(h->object_base);
+	h->chunk_limit = ptr_to_iptr(h->chunk_limit);
+	h->chunk->limit = ptr_to_iptr(h->chunk->limit);
 
 	//register_obstack(h);
 
