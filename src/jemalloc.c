@@ -29,7 +29,7 @@
 
 static unsigned long long event_id = 1;
 //static unsigned long long min_events = 2500110962; //1380498462ULL; //21498951ULL; //8600857659ULL; //0xffff4800000000ULL;
-static unsigned long long min_events = 0; //0xffff4800000000ULL;
+static unsigned long long min_events = 0xffff4800000000ULL;
 static int trace_count = 0;
 
 static int LastLine =  0;
@@ -3161,6 +3161,16 @@ static void *_je_san_get_base(void *ptr) {
 	return head;
 }
 
+static void *_je_san_get_base3(void *ptr) {
+	void *_ptr = UNMASK(ptr);
+	struct obj_header *head = (struct obj_header*)__je_san_get_base(_ptr);
+	assert(IS_MAGIC(head->magic));
+	if (head->offset) {
+		head = (struct obj_header*)((char*)head + head->offset);
+	}
+	return head;
+}
+
 static void *__je_san_get_base1(void *ptr) {
 	if (ptr < MinGlobalAddr) {
 		return NULL;
@@ -3235,24 +3245,23 @@ je_malloc(size_t size) {
 }
 
 JEMALLOC_EXPORT
-void* je_san_get_base(void *ptr) {
+void* je_san_get_limit(void *ptr) {
 	void *ptr1 = UNMASK(ptr);
-	static long long int counter = 0;
-	struct obj_header *h = _je_san_get_base(ptr);
-	//malloc_printf("%lld ptr:%p ptr1:%p h:%p sz:%d\n", counter, ptr, ptr1, h+1, h->size);
+
+	struct obj_header *head = (struct obj_header*)__je_san_get_base(ptr1);
+	assert(IS_MAGIC(head->magic));
+	if (head->offset) {
+		head = (struct obj_header*)((char*)head + head->offset);
+	}
+	char *limit = (char*)(head+1) + head->size;
 	if (ptr != ptr1) {
 		size_t offset = get_offset_from_ptr((size_t)ptr);
-		assert(offset == 0);
 		if (can_print_in_trace_fp()) {
-			fprintf(trace_fp, "%s: ptr:%p base:%p\n", __func__, ptr, h);
+			fprintf(trace_fp, "%s: ptr:%p base:%p limit:%p\n", __func__, ptr, head, limit);
 		}
-		h = (struct obj_header*)get_interior((size_t)h, offset);
+		limit = (char*)get_interior((size_t)limit, offset);
 	}
-	if (ptr1 == (void*)(h+1)) {
-		counter++;
-		//malloc_printf("%lld ptr:%p ptr1:%p h:%p\n", counter, ptr, ptr1, h+1);
-	}
-	return h+1;
+	return limit;
 }
 
 JEMALLOC_EXPORT
@@ -4466,7 +4475,7 @@ void je_san_abort2(void *base, void *cur, void *limit, void *ptrlimit, void *cal
 	if (cur < base) {
 		char *_base = (void*)UNMASK(base);
 		char *_cur = (void*)UNMASK(cur);
-		char *orig_base = _je_san_get_base(cur) + 8;
+		char *orig_base = _je_san_get_base(base) + 8;
 		if (_cur < (char*)0x8000000) {
 			if (!(orig_base + *((unsigned*)(orig_base-4)) >= _base)) {
 				malloc_printf("orig_base:%p base:%p _base:%p _cur:%p cur:%p\n", orig_base, base, _base, _cur, cur);
@@ -4491,6 +4500,48 @@ void je_san_abort2(void *base, void *cur, void *limit, void *ptrlimit, void *cal
 
 	void *_base = (void*)UNMASK(base);
 	unsigned *head = _je_san_get_base(base);
+
+	unsigned len = *((unsigned*)_base - 1);
+	unsigned magic = *((unsigned*)_base -2);
+	char *end = (char*)_base + len;
+	if (trace_fp) {
+		fprintf(trace_fp, "%lld base:%p cur:%p len:%d magic:%x end:%p\n"
+						          "limit:%p ptrlimit:%p callsite:%p\n",
+						          event_id, base, cur, len, magic, end, limit, ptrlimit, callsite);
+		fprintf(trace_fp, "head:%p head0:%x head1:%x\n", head, head[0], head[1]);
+	}
+	else {
+		malloc_printf("%lld base:%p cur:%p len:%d magic:%x end:%p\n"
+									"limit:%p ptrlimit:%p callsite:%p\n",
+									event_id, base, cur, len, magic, end, limit, ptrlimit, callsite);
+		malloc_printf("head:%p head0:%x head1:%x\n", head, head[0], head[1]);
+		myfunc3();
+	}
+	abort3("abort2");
+}
+
+JEMALLOC_EXPORT
+void je_san_abort3(void *base, void *cur, void *limit, void *ptrlimit, void *callsite) {
+	if (UNMASK(base) < (char*)0x80000000 /*|| is_stack_ptr(UNMASK(base))*/) {
+		//return;
+	}
+	if (cur < base) {
+		char *_base = (void*)UNMASK(base);
+		char *_cur = (void*)UNMASK(cur);
+		char *orig_base = _je_san_get_base3(_base) + 8;
+		if (_cur < (char*)0x8000000) {
+			if (!(orig_base + *((unsigned*)(orig_base-4)) >= _base)) {
+				malloc_printf("orig_base:%p base:%p _base:%p _cur:%p cur:%p\n", orig_base, base, _base, _cur, cur);
+				abort3("hi");
+			}
+		}
+		if (orig_base && _cur >= orig_base) {
+			return;
+		}
+	}
+
+	void *_base = (void*)UNMASK(base);
+	unsigned *head = _je_san_get_base3(base);
 
 	unsigned len = *((unsigned*)_base - 1);
 	unsigned magic = *((unsigned*)_base -2);
