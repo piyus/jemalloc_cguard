@@ -79,7 +79,8 @@ static size_t get_interior(size_t ptr, size_t offset) {
 }
 
 static size_t get_interior_add(size_t ptr, size_t offset) {
-	offset += get_offset_from_ptr(ptr);
+	size_t old_offset = get_offset_from_ptr(ptr);
+	offset = (old_offset == MAX_OFFSET) ? old_offset : offset + old_offset;
 	return get_interior(ptr, offset);
 }
 
