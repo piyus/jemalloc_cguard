@@ -4724,63 +4724,6 @@ je_strtoul(const char *_nptr, char **_endptr, int base) {
 		}
 	}
 	return ret;
-
-#if 0
-
-	register const char *s = (const char*)UNMASK(_nptr);
-	register unsigned long acc;
-	register int c;
-	register unsigned long cutoff;
-	register int neg = 0, any, cutlim;
-
-	/*
-	 * See strtol for comments as to the logic used.
-	 */
-	do {
-		c = *s++;
-	} while (isspace(c));
-	if (c == '-') {
-		neg = 1;
-		c = *s++;
-	} else if (c == '+')
-		c = *s++;
-	if ((base == 0 || base == 16) &&
-	    c == '0' && (*s == 'x' || *s == 'X')) {
-		c = s[1];
-		s += 2;
-		base = 16;
-	}
-	if (base == 0)
-		base = c == '0' ? 8 : 10;
-	cutoff = (unsigned long)ULONG_MAX / (unsigned long)base;
-	cutlim = (unsigned long)ULONG_MAX % (unsigned long)base;
-	for (acc = 0, any = 0;; c = *s++) {
-		if (isdigit(c))
-			c -= '0';
-		else if (isalpha(c))
-			c -= isupper(c) ? 'A' - 10 : 'a' - 10;
-		else
-			break;
-		if (c >= base)
-			break;
-		if (any < 0 || acc > cutoff || (acc == cutoff && c > cutlim))
-			any = -1;
-		else {
-			any = 1;
-			acc *= base;
-			acc += c;
-		}
-	}
-	if (any < 0) {
-		acc = ULONG_MAX;
-		errno = ERANGE;
-	} else if (neg)
-		acc = -acc;
-	if (endptr != 0) {
-		*endptr = (char *) (any ? _MASK2(s - 1) : _nptr);
-	}
-	return (acc);
-#endif
 }
 
 JEMALLOC_EXPORT
@@ -4931,22 +4874,6 @@ void *
 je_memchr(void const *_s, int c_in, size_t n)
 {
 	void const *s = (void const*)UNMASK(_s);
-#if 0
-	void *ret;
-
-	static void* (*fptr)(void const *, int, size_t) = NULL;
-	if (fptr == NULL) {
-		fptr = get_func_addr("memchr", je_memchr);
-	}
-	ret = fptr(s, c_in, n);
-	if (ret && ret != (void*)_s) {
-		ret = (void*)_MASK2(ret);
-	}
-	return ret;
-
-#endif
-
-
   typedef unsigned long int longword;
   const unsigned char *char_ptr;
   const longword *longword_ptr;
@@ -4999,21 +4926,6 @@ je_memchr(void const *_s, int c_in, size_t n)
   return NULL;
 }
 
-
-#if 0
-JEMALLOC_EXPORT
-void* je_memchr(const void *_s, int c, size_t n) {
-	const char *s = (const char*)UNMASK(_s);
-	size_t i;
-  for (i = 0; i < n; i++) {
-    if (s[i] == (char)c) {
-      return (i == 0) ? (void*)_s : (void*)(_MASK2(&s[i]));
-		}
-  }
-	return NULL;
-}
-#endif
-
 JEMALLOC_EXPORT
 char *je_strrchr(const char *_s, int c) {
   const char *res = NULL;
@@ -5021,7 +4933,7 @@ char *je_strrchr(const char *_s, int c) {
   for (int i = 0; s[i]; i++) {
     if (s[i] == c) res = s + i;
   }
-  return (res == s) ? (char*)(_s) : (char *)(_MASK2(res));
+  return (res == s) ? (char*)(_s) : (char *)(je_san_interior1(_s, res));
 }
 
 JEMALLOC_EXPORT
