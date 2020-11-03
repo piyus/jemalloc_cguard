@@ -21,9 +21,6 @@
 #include "jemalloc/internal/util.h"
 #include <obstack.h>
 
-#define INTERIOR_STR 0xcabaULL
-
-
 #undef obstack_free
 
 #define ALIGN_PAD(y) ((size_t)(y)-1)
@@ -3766,10 +3763,14 @@ ssize_t je___getdelim(char **_lineptr, size_t *_n, int delim, FILE *_stream)
 
 #define MAX_INTERIOR 10
 
+static bool is_interior(size_t addr) {
+	size_t header = addr >> 40;
+	return ((header >> 8) > 0) && ((header & 0xff) == 0x7f);
+}
+
 
 static int fix_varg_interiors(va_list ap, unsigned long long **fixes, unsigned long long *vals) {
 	unsigned long long *reg_save_area, *mem_save_area;
-	unsigned long long mask;
 	int num_fixes = 0;
 	int i;
 
@@ -3777,8 +3778,7 @@ static int fix_varg_interiors(va_list ap, unsigned long long **fixes, unsigned l
   mem_save_area = *(unsigned long long**)((unsigned long long)ap+8);
   if (mem_save_area) {
     for (i = 0; i < 8; i++) {
-			mask = (mem_save_area[i] >> 48);
-			if (mask == INTERIOR_STR) {
+			if (is_interior(mem_save_area[i])) {
 				assert(num_fixes < MAX_INTERIOR);
 				vals[num_fixes] = mem_save_area[i];
 				fixes[num_fixes++] = &mem_save_area[i];
@@ -3788,8 +3788,7 @@ static int fix_varg_interiors(va_list ap, unsigned long long **fixes, unsigned l
   }
   if (reg_save_area) {
     for (i = 0; i < 8; i++) {
-			mask = (reg_save_area[i] >> 48);
-			if (mask == INTERIOR_STR) {
+			if (is_interior(reg_save_area[i])) {
 				assert(num_fixes < MAX_INTERIOR);
 				vals[num_fixes] = reg_save_area[i];
 				fixes[num_fixes++] = &reg_save_area[i];
