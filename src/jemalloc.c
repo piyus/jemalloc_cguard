@@ -167,17 +167,11 @@ static int enable_masking = 0;
 static int stack_initialized = 0;
 static __thread char *je_stack_begin = NULL;
 
-#define MAX_LARGE_PTRS 102400
-//static void *large_ptrs[MAX_LARGE_PTRS];
-//static int num_large_ptrs = 0;
-
 #define INTERIOR_STR1 0xcaba7fULL
 #define TRACK_STR 0 //0xcabaULL
 #define TRACK_SHIFT 48
 #define UNMASK(x) ((char*)((((uint64_t)(x)) & 0xffffffffffffULL)))
-//#define _MASK(x) (char*)(x) //((char*)((((uint64_t)(x)) | (INTERIOR_STR << 48))))
 #define _MASK1(x) ((enable_masking) ? ((char*)((((uint64_t)(x)) | (1ULL << 48)))) : (char*)(x))
-#define _MASK2(x) ((enable_masking) ? ((char*)((((uint64_t)(x)) | (0xFFFEULL << 48)))) : (char*)(x))
 
 
 static bool need_tracking(unsigned long long val) {
