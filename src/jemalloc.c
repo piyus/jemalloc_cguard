@@ -3480,6 +3480,8 @@ static void print_all_obstack();
 
 JEMALLOC_EXPORT
 void* je_san_interior(void *_base, void *_ptr) {
+	size_t mask = (((size_t)_base) ^ ((size_t)_ptr)) >> 48;
+	assert(mask == 0);
 	if (_base == _ptr) {
 		return _base;
 	}
@@ -3487,6 +3489,13 @@ void* je_san_interior(void *_base, void *_ptr) {
 		fprintf(trace_fp, "%s: ptr:%p base:%p\n", __func__, _ptr, _base);
 	}
 	return (char*)get_interior_add((size_t)_ptr, (size_t)(_ptr-_base));
+}
+
+static
+void* je_san_interior1(const void *_base, const void *_ptr) {
+	size_t offset = ((size_t)_base) >> 48;
+	_ptr = (const void*)((size_t)_ptr | (offset << 48));
+	return je_san_interior((void*)_base, (void*)_ptr);
 }
 
 
@@ -4639,7 +4648,7 @@ char *je_strstr(const char *_haystack, const char *_needle) {
   if (len1 < len2) return NULL;
   for (size_t pos = 0; pos <= len1 - len2; pos++) {
     if (memcmp(haystack + pos, needle, len2) == 0)
-      return (pos == 0) ? (char*)_haystack : (char*)_MASK2((haystack + pos));
+      return (pos == 0) ? (char*)_haystack : (char*)je_san_interior((void*)_haystack, (void*)_haystack + pos);
   }
   return NULL;
 }
@@ -4666,7 +4675,7 @@ je_strtod(const char *_nptr, char **_endptr) {
 			*endptr = (char*)_nptr;
 		}
 		else {
-			*endptr = _MASK2(*endptr);
+			*endptr = je_san_interior1(_nptr, *endptr);
 		}
 	}
 	return ret;
@@ -4689,7 +4698,7 @@ je_strtol(const char *_nptr, char **_endptr, int base) {
 			*endptr = (char*)_nptr;
 		}
 		else {
-			*endptr = _MASK2(*endptr);
+			*endptr = je_san_interior1(_nptr, *endptr);
 		}
 	}
 	return ret;
@@ -4712,7 +4721,7 @@ je_strtoul(const char *_nptr, char **_endptr, int base) {
 			*endptr = (char*)_nptr;
 		}
 		else {
-			*endptr = _MASK2(*endptr);
+			*endptr = je_san_interior1(_nptr, *endptr);
 		}
 	}
 	return ret;
@@ -4787,7 +4796,7 @@ char* je_strchr(const char *_s, int c) {
 	s++;
   while (true) {
     if (*s == (char)c)
-      return (char*)(_MASK2(s));
+      return (char*)(je_san_interior1(_s, s));
     if (*s == 0)
       return NULL;
     s++; 
@@ -4818,11 +4827,11 @@ je_strtok(char *_s, const char *delim)
   end = s + strcspn (s, delim);
   if (*end == '\0')
     {
-      return (s == _s) ? _s : _MASK2(s);
+      return (s == _s) ? _s : je_san_interior1(_s, s);
     }
   /* Terminate the token and make *SAVE_PTR point past it.  */
   *end = '\0';
-  return (s == _s) ? _s : _MASK2(s);
+  return (s == _s) ? _s : je_san_interior1(_s, s);
 }
 
 
@@ -4916,7 +4925,7 @@ je_putenv(char *_name)
 	return fptr(name);
 }
 
-#define GET_INTERIOR(x, y) ((x == NULL || ((void*)(x) == (void*)(y))) ? (void*)(x) : (void*)_MASK2(x))
+#define GET_INTERIOR(x, y) ((x == NULL || ((void*)(x) == (void*)(y))) ? (void*)(x) : (void*)je_san_interior1(y, x))
 
 JEMALLOC_EXPORT
 void *
