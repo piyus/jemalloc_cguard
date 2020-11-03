@@ -91,7 +91,7 @@ void
 je_qsort (void *const pbase, size_t total_elems, size_t size,
             __compar_fn_t _cmp)
 {
-  register char *base_ptr = (char *) _MASK2(pbase);
+  register char *base_ptr = (char *) pbase;
 	__compar_fn_t cmp = (__compar_fn_t)UNMASK(_cmp);
 
   const size_t max_thresh = MAX_THRESH * size;
@@ -122,13 +122,13 @@ je_qsort (void *const pbase, size_t total_elems, size_t size,
 
           char *mid = lo + size * ((hi - lo) / size >> 1);
 
-          if ((*cmp) ((void *) mid, (void *) lo) < 0)
+          if ((*cmp) ((void *) je_san_interior(base_ptr, mid), (void *) je_san_interior(base_ptr, lo)) < 0)
             SWAP (mid, lo, size);
-          if ((*cmp) ((void *) hi, (void *) mid) < 0)
+          if ((*cmp) ((void *) je_san_interior(base_ptr, hi), (void *) je_san_interior(base_ptr, mid)) < 0)
             SWAP (mid, hi, size);
           else
             goto jump_over;
-          if ((*cmp) ((void *) mid, (void *) lo) < 0)
+          if ((*cmp) ((void *) je_san_interior(base_ptr, mid), (void *) je_san_interior(base_ptr, lo)) < 0)
             SWAP (mid, lo, size);
         jump_over:;
 
@@ -140,11 +140,13 @@ je_qsort (void *const pbase, size_t total_elems, size_t size,
              that this algorithm runs much faster than others. */
           do
             {
-              while ((*cmp) ((void *) left_ptr, (void *) mid) < 0)
+              while ((*cmp) ((void *) je_san_interior(base_ptr, left_ptr), (void *) je_san_interior(base_ptr, mid)) < 0) {
                 left_ptr += size;
+							}
 
-              while ((*cmp) ((void *) mid, (void *) right_ptr) < 0)
+              while ((*cmp) ((void *) je_san_interior(base_ptr, mid), (void *) je_san_interior(base_ptr, right_ptr)) < 0) {
                 right_ptr -= size;
+							}
 
               if (left_ptr < right_ptr)
                 {
@@ -216,7 +218,7 @@ je_qsort (void *const pbase, size_t total_elems, size_t size,
        and the operation speeds up insertion sort's inner loop. */
 
     for (run_ptr = tmp_ptr + size; run_ptr <= thresh; run_ptr += size)
-      if ((*cmp) ((void *) run_ptr, (void *) tmp_ptr) < 0)
+      if ((*cmp) ((void *) je_san_interior(base_ptr, run_ptr), (void *) je_san_interior(base_ptr, tmp_ptr)) < 0)
         tmp_ptr = run_ptr;
 
     if (tmp_ptr != base_ptr)
@@ -228,7 +230,7 @@ je_qsort (void *const pbase, size_t total_elems, size_t size,
     while ((run_ptr += size) <= end_ptr)
       {
         tmp_ptr = run_ptr - size;
-        while ((*cmp) ((void *) run_ptr, (void *) tmp_ptr) < 0)
+        while ((*cmp) ((void *) je_san_interior(base_ptr, run_ptr), (void *) je_san_interior(base_ptr, tmp_ptr)) < 0)
           tmp_ptr -= size;
 
         tmp_ptr += size;

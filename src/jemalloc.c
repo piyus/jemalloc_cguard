@@ -179,7 +179,6 @@ static __thread char *je_stack_begin = NULL;
 #define _MASK1(x) ((enable_masking) ? ((char*)((((uint64_t)(x)) | (1ULL << 48)))) : (char*)(x))
 #define _MASK2(x) ((enable_masking) ? ((char*)((((uint64_t)(x)) | (0xFFFEULL << 48)))) : (char*)(x))
 
-#include "qsort.c"
 
 static bool need_tracking(unsigned long long val) {
 	if (!TRACK_STR) {
@@ -5048,6 +5047,8 @@ char *je_strcat(char *_dst, const char *_src) {
   dst[len + i] = 0;
   return _dst;
 }
+
+#include "qsort.c"
 
 
 
