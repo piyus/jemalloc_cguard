@@ -4096,7 +4096,8 @@ const unsigned short** je___ctype_b_loc(void)
 	fptr = get_func_addr("__ctype_b_loc", je___ctype_b_loc);
 	unsigned short **orig = fptr();
 	memcpy(ret, orig[0]-128, size);
-	retptr[0] = (unsigned short*)_MASK2(ret + 128);
+	unsigned short *reti = ret + 128;
+	retptr[0] = (unsigned short*)get_interior((size_t)reti, reti - ret);
 	return (const unsigned short**)retptr;
 }
 
@@ -4122,7 +4123,8 @@ const __int32_t** je___ctype_toupper_loc(void)
 	fptr = get_func_addr("__ctype_toupper_loc", je___ctype_toupper_loc);
 	int **orig = fptr();
 	memcpy(ret, orig[0]-128, size);
-	retptr[0] = (int*)_MASK2(ret + 128);
+	int *reti = ret + 128;
+	retptr[0] = (int*)get_interior((size_t)reti, reti - ret);
 	return (const int**)retptr;
 }
 
@@ -4148,7 +4150,8 @@ const __int32_t** je___ctype_tolower_loc(void)
 	fptr = get_func_addr("__ctype_tolower_loc", je___ctype_tolower_loc);
 	int **orig = fptr();
 	memcpy(ret, orig[0]-128, size);
-	retptr[0] = (int*)_MASK2(ret + 128);
+	int *reti = ret + 128;
+	retptr[0] = (int*)get_interior((size_t)reti, reti - ret);
 	return (const int**)retptr;
 }
 
