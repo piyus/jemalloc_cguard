@@ -29,7 +29,7 @@
 
 static unsigned long long event_id = 1;
 //static unsigned long long min_events = 2500110962; //1380498462ULL; //21498951ULL; //8600857659ULL; //0xffff4800000000ULL;
-static unsigned long long min_events = 0xffff4800000000ULL;
+static unsigned long long min_events = 0; //0xffff4800000000ULL;
 static int trace_count = 0;
 
 static int LastLine =  0;
@@ -42,6 +42,21 @@ struct obj_header {
 };
 
 static FILE *trace_fp = NULL;
+#define MAGIC_NUMBER 0xface
+
+static void abort3(const char *msg)
+{
+	if (trace_fp) {
+		fprintf(trace_fp, "event_id:%lld %s\n", event_id, msg);
+		syncfs(fileno(trace_fp));
+		fclose(trace_fp);
+	}
+	assert(0);
+}
+
+static inline bool is_valid_obj_header(struct obj_header *head) {
+	return head->magic == MAGIC_NUMBER;
+}
 
 static bool is_invalid_ptr(size_t ptr) {
 	return (ptr >> 48) & 1;
@@ -50,6 +65,7 @@ static bool is_invalid_ptr(size_t ptr) {
 static size_t get_offset_from_ptr(size_t ptr) {
 	return ptr >> 49;
 }
+
 
 #define MAX_OFFSET ((1ULL<<15) - 1)
 
@@ -62,19 +78,30 @@ static size_t get_interior(size_t ptr, size_t offset) {
 	return ptr;
 }
 
-
-static void abort3(const char *msg)
-{
-	if (trace_fp) {
-		fprintf(trace_fp, "event_id:%lld %s\n", event_id, msg);
-		syncfs(fileno(trace_fp));
-		fclose(trace_fp);
-	}
-	assert(0);
+static size_t get_interior_add(size_t ptr, size_t offset) {
+	offset += get_offset_from_ptr(ptr);
+	return get_interior(ptr, offset);
 }
 
+static void* get_fast_base(size_t object) {
+	size_t offset = (object >> 49);
+	if (offset == MAX_OFFSET) {
+		return NULL;
+	}
+	struct obj_header *head = (struct obj_header*)((object & 0xFFFFFFFFFFFF) - offset - 8);
+	if (!is_valid_obj_header(head)) {
+		if (trace_fp) {
+			fprintf(trace_fp, "head:%p ptr:%p\n", head, (void*)object);
+			abort3("hi");
+		}
+	}
+	return head;
+}
+
+
+
 static inline bool can_print_in_trace_fp() {
-	if ((event_id < min_events && trace_count <= 0) || !trace_fp) {
+	if ((event_id < min_events /* && trace_count <= 0*/) || !trace_fp) {
 		return false;
 	}
 	if (trace_count > 0) {
@@ -185,7 +212,6 @@ static void remove_large_pointer(void *ptr, size_t size) {
 	}
 }
 
-#define MAGIC_NUMBER 0xface
 
 #define IS_MAGIC(x) (((x) & 0xffff) == MAGIC_NUMBER)
 
@@ -198,10 +224,6 @@ static void *make_obj_header(void *ptr, size_t size, unsigned short offset) {
 	return &header[1];
 }
 
-
-static inline bool is_valid_obj_header(struct obj_header *head) {
-	return head->magic == MAGIC_NUMBER;
-}
 
 
 #else
@@ -2858,7 +2880,7 @@ set_trace_fp() {
 JEMALLOC_EXPORT
 void je_san_trace(char *_name, int line, int type, unsigned long long val1) {
 	event_id++;
-	if (can_print_in_trace_fp()/*&& !(type == ENTRY_TY || type == EXIT_TY)*/) {
+	if (!can_print_in_trace_fp()) {
 		return;
 	}
 	trace_count--;
@@ -3126,10 +3148,15 @@ static void *__je_san_get_base(void *ptr) {
 }
 
 static void *_je_san_get_base(void *ptr) {
-	struct obj_header *head = (struct obj_header*)__je_san_get_base(ptr);
+	void *_ptr = UNMASK(ptr);
+	struct obj_header *head = (struct obj_header*)__je_san_get_base(_ptr);
 	assert(IS_MAGIC(head->magic));
 	if (head->offset) {
-		return (void*)((char*)head + head->offset);
+		head = (struct obj_header*)((char*)head + head->offset);
+	}
+	void *fbase = get_fast_base((size_t)ptr);
+	if (fbase) {
+		assert(head == fbase);
 	}
 	return head;
 }
@@ -3211,10 +3238,14 @@ JEMALLOC_EXPORT
 void* je_san_get_base(void *ptr) {
 	void *ptr1 = UNMASK(ptr);
 	static long long int counter = 0;
-	struct obj_header *h = _je_san_get_base(ptr1);
+	struct obj_header *h = _je_san_get_base(ptr);
 	//malloc_printf("%lld ptr:%p ptr1:%p h:%p sz:%d\n", counter, ptr, ptr1, h+1, h->size);
 	if (ptr != ptr1) {
 		size_t offset = get_offset_from_ptr((size_t)ptr);
+		assert(offset == 0);
+		if (can_print_in_trace_fp()) {
+			fprintf(trace_fp, "%s: ptr:%p base:%p\n", __func__, ptr, h);
+		}
 		h = (struct obj_header*)get_interior((size_t)h, offset);
 	}
 	if (ptr1 == (void*)(h+1)) {
@@ -3442,7 +3473,10 @@ void* je_san_interior(void *_base, void *_ptr) {
 	if (_base == _ptr) {
 		return _base;
 	}
-	return (char*)get_interior((size_t)_ptr, (size_t)(_ptr-_base));
+	if (can_print_in_trace_fp()) {
+		fprintf(trace_fp, "%s: ptr:%p base:%p\n", __func__, _ptr, _base);
+	}
+	return (char*)get_interior_add((size_t)_ptr, (size_t)(_ptr-_base));
 }
 
 
@@ -3481,6 +3515,9 @@ void* je_san_interior_checked(void *_base, void *_ptr, size_t ptrsize) {
 		//if (ptrsize == 224 || ptrsize == 96 || (size == 16 && ptrsize==24) || ptrsize==64 || ptrsize == 48 || ptrsize == 4)
 			//abort3("hi");
 		return _MASK1(ptr);
+	}
+	if (can_print_in_trace_fp()) {
+		fprintf(trace_fp, "%s: ptr:%p base:%p\n", __func__, ptr, start);
 	}
 	return (char*)get_interior((size_t)ptr, (size_t)((char*)ptr-start));
 }
@@ -3557,6 +3594,9 @@ void* je_san_interior_must_check(void *_base, void *_ptr, size_t ptrsize) {
 		}
 		return _MASK1(ptr);
 	}
+	if (can_print_in_trace_fp()) {
+		fprintf(trace_fp, "%s: ptr:%p base:%p\n", __func__, ptr, start);
+	}
 	return (char*)get_interior((size_t)ptr, (size_t)((char*)ptr-start));
 }
 
@@ -3588,7 +3628,7 @@ unsigned je_san_page_fault_len(void *ptr, int line, char *name) {
 	unsigned *head;
 	//malloc_printf("magic:%x size:%x\n", magic, optr[0]);
 	if (!IS_MAGIC(magic) || ptr != optr) {
-		head = _je_san_get_base(optr);
+		head = _je_san_get_base(ptr+4);
 		if (head == NULL) {
 			if (trace_fp) {
 				fprintf(trace_fp, "%lld ptr:%p head:%p line:%d\n", event_id, optr, head, line);
@@ -4426,7 +4466,7 @@ void je_san_abort2(void *base, void *cur, void *limit, void *ptrlimit, void *cal
 	if (cur < base) {
 		char *_base = (void*)UNMASK(base);
 		char *_cur = (void*)UNMASK(cur);
-		char *orig_base = _je_san_get_base(_cur) + 8;
+		char *orig_base = _je_san_get_base(cur) + 8;
 		if (_cur < (char*)0x8000000) {
 			if (!(orig_base + *((unsigned*)(orig_base-4)) >= _base)) {
 				malloc_printf("orig_base:%p base:%p _base:%p _cur:%p cur:%p\n", orig_base, base, _base, _cur, cur);
@@ -4450,7 +4490,7 @@ void je_san_abort2(void *base, void *cur, void *limit, void *ptrlimit, void *cal
 	}
 
 	void *_base = (void*)UNMASK(base);
-	unsigned *head = _je_san_get_base(_base);
+	unsigned *head = _je_san_get_base(base);
 
 	unsigned len = *((unsigned*)_base - 1);
 	unsigned magic = *((unsigned*)_base -2);
