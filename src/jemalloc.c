@@ -28,7 +28,7 @@
 #define JE_ALIGN(x, y) (char*)(((size_t)(x) + ALIGN_PAD(y)) & ALIGN_MASK(y))
 
 static unsigned long long event_id = 1;
-//static unsigned long long min_events = 2500110962; //1380498462ULL; //21498951ULL; //8600857659ULL; //0xffff4800000000ULL;
+//static unsigned long long min_events = 210524731ULL; //21498951ULL; //8600857659ULL; //0xffff4800000000ULL;
 static unsigned long long min_events = 0xffff4800000000ULL;
 static int trace_count = 0;
 
@@ -3346,6 +3346,7 @@ void* je_san_page_fault_load(void *ptr, int line, char *name) {
 
 	if (((((size_t)ptr)>>48) & 1) != 0) {
 		unsigned *base = _je_san_get_base1(optr);
+			malloc_printf("base:%p ptr:%p\n", base, ptr);
 		if (base == NULL) {
 			malloc_printf("base:%p ptr:%p\n", base, ptr);
 			ABORT4( ((((size_t)ptr)>>48) & 1) == 0 );
@@ -3357,7 +3358,7 @@ void* je_san_page_fault_load(void *ptr, int line, char *name) {
 			ABORT4( ((((size_t)ptr)>>48) & 1) == 0 );
 		}
 	}
-	//ABORT4( ((((size_t)ptr)>>48) & 1) == 0 );
+	ABORT4( ((((size_t)ptr)>>48) & 1) == 0 );
 #if 0
 	void *oval = (void*)(((unsigned long long)val) & 0x7fffffffffffffffULL);
 	if (oval) {
@@ -3394,6 +3395,7 @@ void* je_san_page_fault_store(void *ptr, void *val, int line, char *name) {
 
 	if (((((size_t)ptr)>>48) & 1) != 0) {
 		unsigned *base = _je_san_get_base1(optr);
+			malloc_printf("st: base:%p ptr:%p\n", base, ptr);
 		if (base == NULL) {
 			malloc_printf("base:%p ptr:%p\n", base, ptr);
 			ABORT4( ((((size_t)ptr)>>48) & 1) == 0 );
@@ -3406,7 +3408,7 @@ void* je_san_page_fault_store(void *ptr, void *val, int line, char *name) {
 		}
 	}
 
-	//ABORT4( ((((size_t)ptr)>>48) & 1) == 0 );
+	ABORT4( ((((size_t)ptr)>>48) & 1) == 0 );
 #if 0
 	void *oval = (void*)(((unsigned long long)val) & 0x7fffffffffffffffULL);
 	if (oval) {
