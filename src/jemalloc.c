@@ -3145,16 +3145,20 @@ static void *__je_san_get_base(void *ptr) {
 }
 
 static void *_je_san_get_base(void *ptr) {
+	void *fbase = get_fast_base((size_t)ptr);
+	if (fbase) {
+		return fbase;
+	}
 	void *_ptr = UNMASK(ptr);
 	struct obj_header *head = (struct obj_header*)__je_san_get_base(_ptr);
 	assert(IS_MAGIC(head->magic));
 	if (head->offset) {
 		head = (struct obj_header*)((char*)head + head->offset);
 	}
-	void *fbase = get_fast_base((size_t)ptr);
+	/*void *fbase = get_fast_base((size_t)ptr);
 	if (fbase) {
 		assert(head == fbase);
-	}
+	}*/
 	return head;
 }
 
@@ -3511,13 +3515,19 @@ void* je_san_interior_checked(void *_base, void *_ptr, size_t ptrsize) {
 	}
 	void *ptr = UNMASK(_ptr);
 	void *base = UNMASK(_base);
-	if (ptr == NULL || base == NULL || is_invalid_ptr((size_t)_base)) {
+
+	if (ptr < MinGlobalAddr || base < MinGlobalAddr || is_invalid_ptr((size_t)_base)) {
 		if (can_print_in_trace_fp()) {
 			fprintf(trace_fp, "making interior1: ptr:%p base:%p\n", ptr, base);
 		}
 		return _MASK1(ptr);
 	}
-	unsigned *head = _je_san_get_base1(base);
+
+	unsigned *head = NULL; //get_fast_base((size_t)_base);
+
+	if (head == NULL) {
+		head = _je_san_get_base1(base);
+	}
 	if (head == NULL) {
 		if (can_print_in_trace_fp()) {
 			fprintf(trace_fp, "making interior2: ptr:%p base:%p\n", ptr, base);
@@ -3541,7 +3551,7 @@ void* je_san_interior_checked(void *_base, void *_ptr, size_t ptrsize) {
 		return _MASK1(ptr);
 	}
 	if (can_print_in_trace_fp()) {
-		fprintf(trace_fp, "%s: ptr:%p base:%p\n", __func__, ptr, start);
+		fprintf(trace_fp, "%s: ptr:%p base:%p obase:%p\n", __func__, ptr, base, start);
 	}
 	return (char*)get_interior((size_t)ptr, (size_t)((char*)ptr-start));
 }
