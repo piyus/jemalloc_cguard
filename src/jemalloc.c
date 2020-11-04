@@ -31,6 +31,7 @@ static unsigned long long event_id = 1;
 //static unsigned long long min_events = 210524731ULL; //21498951ULL; //8600857659ULL; //0xffff4800000000ULL;
 static unsigned long long min_events = 0xffff4800000000ULL;
 static int trace_count = 0;
+static __thread bool signal_handler_invoked = false;
 
 static int LastLine =  0;
 static char LastName[64];
@@ -96,6 +97,31 @@ static size_t get_interior_add(size_t ptr, size_t offset) {
 	offset = (old_offset == MAX_OFFSET) ? old_offset : offset + old_offset;
 	return get_interior(ptr, offset);
 }
+
+static void* get_fast_base_safe(size_t object, bool *large_offset) {
+	size_t offset = (object >> 49);
+	if (offset == MAX_OFFSET) {
+		*large_offset = true;
+		return NULL;
+	}
+	struct obj_header *head = (struct obj_header*)((object & 0xFFFFFFFFFFFF) - offset - 8);
+	int magic_number;
+	asm volatile ("movl (%1), %0 \n\t"
+								"nop; nop; nop; nop; \n\t"
+								"nop; nop; nop; nop; \n\t" : 
+								"=r" (magic_number) : "r"(head));
+
+	if (signal_handler_invoked) {
+		signal_handler_invoked = false;
+		return NULL;
+	}
+
+	if (magic_number != MAGIC_NUMBER) {
+		return NULL;
+	}
+	return head;
+}
+
 
 static void* get_fast_base(size_t object) {
 	size_t offset = (object >> 49);
@@ -3523,11 +3549,14 @@ void* je_san_interior_checked(void *_base, void *_ptr, size_t ptrsize) {
 		return _MASK1(ptr);
 	}
 
-	unsigned *head = NULL; //get_fast_base((size_t)_base);
+	bool large_offset = false;
+	unsigned *head = get_fast_base_safe((size_t)_base, &large_offset);
 
-	if (head == NULL) {
-		head = _je_san_get_base1(base);
+	if (head == NULL && !large_offset) {
+		return _MASK1(ptr);
 	}
+
+	head = _je_san_get_base1(base);
 	if (head == NULL) {
 		if (can_print_in_trace_fp()) {
 			fprintf(trace_fp, "making interior2: ptr:%p base:%p\n", ptr, base);
@@ -4626,9 +4655,30 @@ void je_san_enable_mask() {
 	enable_masking = 1;
 }
 
+#include <signal.h>
+#include <ucontext.h>
+
+
+void posix_signal_handler(int sig, siginfo_t *siginfo, void *arg) {
+	ucontext_t *context = (ucontext_t *)arg;
+  //malloc_printf("Address from where crash happen is %llx \n",context->uc_mcontext.gregs[REG_RIP]);
+	context->uc_mcontext.gregs[REG_RIP] = context->uc_mcontext.gregs[REG_RIP] + 9;
+	signal_handler_invoked = true;
+}
+
+void install_handler() {
+	struct sigaction sig_action = {};
+	sig_action.sa_sigaction = posix_signal_handler;
+	sigemptyset(&sig_action.sa_mask);
+	sig_action.sa_flags = SA_SIGINFO;
+	sigaction(SIGSEGV, &sig_action, NULL);
+}
+
+
 JEMALLOC_EXPORT
 void* je_san_copy_argv(int argc, char **argv) {
 	enable_masking = 1;
+	install_handler();
 	set_trace_fp();
 	initialize_sections();
 	//print_data_section();
