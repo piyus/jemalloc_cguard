@@ -3533,7 +3533,6 @@ void* je_san_interior1(const void *_base, const void *_ptr) {
 	return je_san_interior((void*)_base, (void*)_ptr);
 }
 
-
 JEMALLOC_EXPORT
 void* je_san_interior_checked(void *_base, void *_ptr, size_t ptrsize) {
 	if (_base == _ptr) {
