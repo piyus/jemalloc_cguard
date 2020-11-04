@@ -67,9 +67,22 @@ static size_t get_offset_from_ptr(size_t ptr) {
 }
 
 
+static inline bool can_print_in_trace_fp() {
+	if ((event_id < min_events /* && trace_count <= 0*/) || !trace_fp) {
+		return false;
+	}
+	if (trace_count > 0) {
+		trace_count--;
+	}
+	return true;
+}
+
 #define MAX_OFFSET ((1ULL<<15) - 1)
 
 static size_t get_interior(size_t ptr, size_t offset) {
+	if (can_print_in_trace_fp()) {
+		fprintf(trace_fp, "get_interior:%p %zd\n", (void*)ptr, offset);
+	}
 	if (offset > MAX_OFFSET) {
 		offset = MAX_OFFSET;
 	}
@@ -100,16 +113,6 @@ static void* get_fast_base(size_t object) {
 }
 
 
-
-static inline bool can_print_in_trace_fp() {
-	if ((event_id < min_events /* && trace_count <= 0*/) || !trace_fp) {
-		return false;
-	}
-	if (trace_count > 0) {
-		trace_count--;
-	}
-	return true;
-}
 
 #define ABORT4(x) ({ if (!(x)) { abort3(#x); }   })
 
@@ -3247,7 +3250,7 @@ je_malloc(size_t size) {
 	void *ret = _je_malloc(size + OBJ_HEADER_SIZE);
 	assert(ret);
 	add_large_pointer(ret, size + OBJ_HEADER_SIZE);
-	if (trace_fp || can_print_in_trace_fp()) {
+	if (can_print_in_trace_fp()) {
 		static int reentry = 0;
 		if (reentry == 0) {
 			reentry = 1;
@@ -3526,7 +3529,7 @@ void* je_san_interior_checked(void *_base, void *_ptr, size_t ptrsize) {
 	char *start = (char*)(head + 2);
 	char *end = start + size;
 	if (ptr < (void*)start || ptr + ptrsize > (void*)end) {
-		if (trace_fp) {
+		if (can_print_in_trace_fp()) {
 			fprintf(trace_fp, "making interior: start:%p ptr:%p base:%p size:%d end:%p ptrsize:%zd lastline:%d lastname:%s\n", 
 				start, ptr, base, size, end, ptrsize, LastLine, LastName);
 			//trace_count = 10;
@@ -3551,6 +3554,9 @@ void* je_san_check_size(void *_ptr, size_t ptrsize) {
 		return _MASK1(ptr);
 	}
 	if (ptr < MinGlobalAddr || is_invalid_ptr((size_t)_ptr)) {
+		if (can_print_in_trace_fp()) {
+			fprintf(trace_fp, "making interior4: ptr:%p\n", ptr);
+		}
 		return _MASK1(ptr);
 	}
 
@@ -3569,7 +3575,7 @@ void* je_san_check_size(void *_ptr, size_t ptrsize) {
 	char *start = (char*)(head + 2);
 	char *end = start + size;
 	if (ptr + ptrsize > (void*)end) {
-		if (trace_fp) {
+		if (can_print_in_trace_fp()) {
 			fprintf(trace_fp, "making interior: start:%p ptr:%p size:%d end:%p ptrsize:%zd lastline:%d lastname:%s\n", 
 				start, ptr, size, end, ptrsize, LastLine, LastName);
 			//trace_count = 10;
@@ -3606,7 +3612,7 @@ void* je_san_interior_must_check(void *_base, void *_ptr, size_t ptrsize) {
 	char *start = (char*)(head + 2);
 	char *end = start + size;
 	if (ptr < (void*)start || ptr + ptrsize > (void*)end) {
-		if (trace_fp) {
+		if (can_print_in_trace_fp()) {
 			fprintf(trace_fp, "making interior: start:%p ptr:%p base:%p size:%d end:%p ptrsize:%zd lastline:%d lastname:%s\n", 
 				start, ptr, base, size, end, ptrsize, LastLine, LastName);
 			//trace_count = 10;
@@ -4106,7 +4112,7 @@ const unsigned short** je___ctype_b_loc(void)
 	unsigned short **orig = fptr();
 	memcpy(ret, orig[0]-128, size);
 	unsigned short *reti = ret + 128;
-	retptr[0] = (unsigned short*)get_interior((size_t)reti, reti - ret);
+	retptr[0] = (unsigned short*)get_interior((size_t)reti, 128 * (sizeof(unsigned short)));
 	return (const unsigned short**)retptr;
 }
 
@@ -4133,7 +4139,7 @@ const __int32_t** je___ctype_toupper_loc(void)
 	int **orig = fptr();
 	memcpy(ret, orig[0]-128, size);
 	int *reti = ret + 128;
-	retptr[0] = (int*)get_interior((size_t)reti, reti - ret);
+	retptr[0] = (int*)get_interior((size_t)reti, 128 * sizeof(int));
 	return (const int**)retptr;
 }
 
@@ -4160,7 +4166,7 @@ const __int32_t** je___ctype_tolower_loc(void)
 	int **orig = fptr();
 	memcpy(ret, orig[0]-128, size);
 	int *reti = ret + 128;
-	retptr[0] = (int*)get_interior((size_t)reti, reti - ret);
+	retptr[0] = (int*)get_interior((size_t)reti, 128*sizeof(int));
 	return (const int**)retptr;
 }
 
