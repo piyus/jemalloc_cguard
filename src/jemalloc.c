@@ -31,7 +31,78 @@ static unsigned long long event_id = 1;
 //static unsigned long long min_events = 210524731ULL; //21498951ULL; //8600857659ULL; //0xffff4800000000ULL;
 static unsigned long long min_events = 0xffff4800000000ULL;
 static int trace_count = 0;
-static __thread bool signal_handler_invoked = false;
+static /*__thread*/ bool signal_handler_invoked = false;
+
+#define MAX_FAULTY_PAGES 4096
+#define PAGE_SHIFT 12
+#define FAULTY_BITS 12
+#define FAULTY_MASK ((1ULL<<FAULTY_BITS) - 1)
+#define MAX_OFFSET ((1ULL<<15) - 1)
+
+
+static size_t FaultyPages[MAX_FAULTY_PAGES] = {0};
+
+static inline size_t faulty_key(size_t addr) {
+	return (addr >> PAGE_SHIFT) & FAULTY_MASK;
+}
+
+static inline bool check_faulty_pages(size_t object)
+{
+	size_t key = faulty_key(object);
+	return FaultyPages[key] == object;
+}
+
+static inline void add_faulty_pages(size_t object)
+{
+	size_t key = faulty_key(object);
+	FaultyPages[key] = object;
+}
+
+static void remove_faulty_pages(size_t object)
+{
+	if (check_faulty_pages(object)) {
+		size_t key = faulty_key(object);
+		FaultyPages[key] = 0;
+	}
+}
+
+struct LargeBase_t {
+	size_t addr;
+	size_t base;
+};
+
+static /*__thread*/ struct LargeBase_t LargeBases[MAX_FAULTY_PAGES] = {0};
+
+static inline size_t base_key(size_t addr) {
+	return addr & FAULTY_MASK;
+}
+
+static size_t check_large_bases(size_t object)
+{
+	size_t key = base_key(object);
+	if (LargeBases[key].addr == object) {
+		return LargeBases[key].base;
+	}
+	return 0;
+}
+
+static inline void add_large_bases(size_t object, size_t base)
+{
+	assert(base <= object);
+	size_t key = base_key(object);
+	LargeBases[key].addr = object;
+	LargeBases[key].base = base;
+}
+
+static void remove_large_base(size_t object) {
+	int i;
+	for (i = 0; i < MAX_FAULTY_PAGES; i++) {
+		if (LargeBases[i].base == object) {
+			LargeBases[i].base = 0;
+			LargeBases[i].addr = 0;
+		}
+	}
+}
 
 static int LastLine =  0;
 static char LastName[64];
@@ -78,7 +149,6 @@ static inline bool can_print_in_trace_fp() {
 	return true;
 }
 
-#define MAX_OFFSET ((1ULL<<15) - 1)
 
 static size_t get_interior(size_t ptr, size_t offset) {
 	if (can_print_in_trace_fp()) {
@@ -98,13 +168,24 @@ static size_t get_interior_add(size_t ptr, size_t offset) {
 	return get_interior(ptr, offset);
 }
 
-static void* get_fast_base_safe(size_t object, bool *large_offset) {
+static inline void* get_fast_base_safe(size_t object, bool *large_offset) {
 	size_t offset = (object >> 49);
 	if (offset == MAX_OFFSET) {
+		size_t base = check_large_bases(object >> 15);
+		if (base) {
+			return (void*)base;
+		}
+		//malloc_printf("LARGE:%p\n", (void*)object);
 		*large_offset = true;
 		return NULL;
 	}
 	struct obj_header *head = (struct obj_header*)((object & 0xFFFFFFFFFFFF) - offset - 8);
+
+	if (check_faulty_pages((size_t)head)) {
+		//malloc_printf("FAULTY: %p\n", head);
+		return NULL;
+	}
+
 	int magic_number;
 	asm volatile ("movl (%1), %0 \n\t"
 								"nop; nop; nop; nop; \n\t"
@@ -112,6 +193,7 @@ static void* get_fast_base_safe(size_t object, bool *large_offset) {
 								"=r" (magic_number) : "r"(head));
 
 	if (signal_handler_invoked) {
+		add_faulty_pages((size_t)head);
 		signal_handler_invoked = false;
 		return NULL;
 	}
@@ -123,10 +205,11 @@ static void* get_fast_base_safe(size_t object, bool *large_offset) {
 }
 
 
-static void* get_fast_base(size_t object) {
+static inline void* get_fast_base(size_t object) {
 	size_t offset = (object >> 49);
 	if (offset == MAX_OFFSET) {
-		return NULL;
+		size_t base = check_large_bases(object >> 15);
+		return (base) ? (void*)base : NULL;
 	}
 	struct obj_header *head = (struct obj_header*)((object & 0xFFFFFFFFFFFF) - offset - 8);
 	if (!is_valid_obj_header(head)) {
@@ -3125,6 +3208,7 @@ static bool is_stack_ptr(char *ptr) {
 }
 
 static void *__je_san_get_base(void *ptr) {
+	//fprintf(trace_fp, "san_get_base1:%p\n", ptr);
 	if (ptr < (void*)0x80000000) {
 		void *ret = get_global_header(ptr);
 		if (ret == NULL) {
@@ -3181,6 +3265,7 @@ static void *_je_san_get_base(void *ptr) {
 	if (head->offset) {
 		head = (struct obj_header*)((char*)head + head->offset);
 	}
+	add_large_bases(((size_t)ptr>>15), (size_t)head);
 	/*void *fbase = get_fast_base((size_t)ptr);
 	if (fbase) {
 		assert(head == fbase);
@@ -3219,6 +3304,7 @@ static void *ptr_to_iptr(void *_ptr) {
 }
 
 static void *__je_san_get_base1(void *ptr) {
+	//fprintf(trace_fp, "san_get_base2:%p\n", ptr);
 	if (ptr < MinGlobalAddr) {
 		return NULL;
 	}
@@ -3259,6 +3345,34 @@ static void *__je_san_get_base1(void *ptr) {
 }
 
 static void *_je_san_get_base1(void *ptr) {
+	bool large_offset = false;
+	void *fbase = get_fast_base_safe((size_t)ptr, &large_offset);
+	if (fbase) {
+		return fbase;
+	}
+	if (!large_offset) {
+		return NULL;
+	}
+
+	struct obj_header *head = (struct obj_header*)__je_san_get_base1(ptr);
+	if (head == NULL) {
+		return head;
+	}
+	assert(IS_MAGIC(head->magic));
+	if (head->offset) {
+		return (void*)((char*)head + head->offset);
+	}
+	add_large_bases(((size_t)ptr>>15), (size_t)head);
+	return head;
+}
+
+static void *_je_san_get_base2(void *ptr) {
+	bool large_offset = false;
+	void *fbase = get_fast_base_safe((size_t)ptr, &large_offset);
+	if (fbase) {
+		return fbase;
+	}
+
 	struct obj_header *head = (struct obj_header*)__je_san_get_base1(ptr);
 	if (head == NULL) {
 		return head;
@@ -3288,6 +3402,7 @@ je_malloc(size_t size) {
 			reentry = 0;
 		}
 	}
+	remove_faulty_pages((size_t)ret);
 	return make_obj_header(ret, size, 0);
 }
 
@@ -3548,14 +3663,16 @@ void* je_san_interior_checked(void *_base, void *_ptr, size_t ptrsize) {
 		return _MASK1(ptr);
 	}
 
+#if 0
 	bool large_offset = false;
 	unsigned *head = get_fast_base_safe((size_t)_base, &large_offset);
 
 	if (head == NULL && !large_offset) {
 		return _MASK1(ptr);
 	}
+#endif
 
-	head = _je_san_get_base1(base);
+	unsigned *head = _je_san_get_base1(_base);
 	if (head == NULL) {
 		if (can_print_in_trace_fp()) {
 			fprintf(trace_fp, "making interior2: ptr:%p base:%p\n", ptr, base);
@@ -3600,7 +3717,7 @@ void* je_san_check_size(void *_ptr, size_t ptrsize) {
 		return _MASK1(ptr);
 	}
 
-	unsigned *head = _je_san_get_base1(ptr);
+	unsigned *head = _je_san_get_base1(_ptr);
 	if (head == NULL) {
 		assert(0);
 		if (can_print_in_trace_fp()) {
@@ -3638,7 +3755,7 @@ void* je_san_interior_must_check(void *_base, void *_ptr, size_t ptrsize) {
 		}
 		return _MASK1(ptr);
 	}
-	unsigned *head = _je_san_get_base1(base);
+	unsigned *head = _je_san_get_base2(_base);
 	if (head == NULL) {
 		if (can_print_in_trace_fp()) {
 			fprintf(trace_fp, "making interior3: ptr:%p base:%p\n", ptr, base);
@@ -5096,6 +5213,7 @@ je_aligned_alloc(size_t alignment, size_t _size) {
 	assert(offset >= OBJ_HEADER_SIZE);
 	header->offset = offset;
 	ret -= OBJ_HEADER_SIZE;
+	remove_faulty_pages((size_t)ret);
 	ret = make_obj_header(ret, _size, 0);
 
 	if (can_print_in_trace_fp()) {
@@ -5193,6 +5311,7 @@ je_calloc(size_t num, size_t size) {
 	void *ret = _je_malloc(total_size + OBJ_HEADER_SIZE);
 	if (ret) {
 		add_large_pointer(ret, total_size + OBJ_HEADER_SIZE);
+		remove_faulty_pages((size_t)ret);
 		ret = make_obj_header(ret, total_size, 0);
 		bzero(ret, total_size);
 	}
@@ -5478,6 +5597,7 @@ je_realloc(void *_ptr, size_t arg_size) {
 	}
 	void *newptr = _je_realloc(head, arg_size + OBJ_HEADER_SIZE);
 	add_large_pointer(newptr, arg_size + OBJ_HEADER_SIZE);
+	remove_faulty_pages((size_t)newptr);
 	return make_obj_header(newptr, arg_size, 0);
 }
 
@@ -5604,8 +5724,14 @@ je_free(void *_ptr) {
 	struct obj_header *head = __je_san_get_base(ptr);
 	assert(head);
 	assert(is_valid_obj_header(head));
+	size_t objhead = (size_t)(((char*)head) + head->offset);
+
 	assert(ptr == (void*)((char*)(&head[1]) + head->offset) || ptr == (void*)(&head[2]));
-	remove_large_pointer(head, get_size_from_obj_header(head));
+	size_t size = get_size_from_obj_header(head);
+	remove_large_pointer(head, size);
+	if (size >= MAX_OFFSET) {
+		remove_large_base(objhead);
+	}
 	_je_free(head);
 }
 
