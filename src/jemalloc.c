@@ -28,7 +28,7 @@
 #define JE_ALIGN(x, y) (char*)(((size_t)(x) + ALIGN_PAD(y)) & ALIGN_MASK(y))
 
 static unsigned long long event_id = 1;
-//static unsigned long long min_events = 210524731ULL; //21498951ULL; //8600857659ULL; //0xffff4800000000ULL;
+//static unsigned long long min_events = 0; //210524731ULL; //21498951ULL; //8600857659ULL; //0xffff4800000000ULL;
 static unsigned long long min_events = 0xffff4800000000ULL;
 static int trace_count = 0;
 static /*__thread*/ bool signal_handler_invoked = false;
@@ -3274,6 +3274,17 @@ static void *_je_san_get_base(void *ptr) {
 }
 
 static void *_je_san_get_base3(void *ptr) {
+
+	size_t object = (size_t)ptr;
+	size_t offset = (object >> 49);
+	if (offset == MAX_OFFSET) {
+		size_t base = check_large_bases(object >> 15);
+		if (base) {
+			return (void*)base;
+		}
+	}
+
+
 	void *_ptr = UNMASK(ptr);
 	struct obj_header *head = (struct obj_header*)__je_san_get_base(_ptr);
 	assert(IS_MAGIC(head->magic));
@@ -3353,8 +3364,9 @@ static void *_je_san_get_base1(void *ptr) {
 	if (!large_offset) {
 		return NULL;
 	}
+	void *_ptr = UNMASK(ptr);
 
-	struct obj_header *head = (struct obj_header*)__je_san_get_base1(ptr);
+	struct obj_header *head = (struct obj_header*)__je_san_get_base1(_ptr);
 	if (head == NULL) {
 		return head;
 	}
@@ -3363,24 +3375,6 @@ static void *_je_san_get_base1(void *ptr) {
 		return (void*)((char*)head + head->offset);
 	}
 	add_large_bases(((size_t)ptr>>15), (size_t)head);
-	return head;
-}
-
-static void *_je_san_get_base2(void *ptr) {
-	bool large_offset = false;
-	void *fbase = get_fast_base_safe((size_t)ptr, &large_offset);
-	if (fbase) {
-		return fbase;
-	}
-
-	struct obj_header *head = (struct obj_header*)__je_san_get_base1(ptr);
-	if (head == NULL) {
-		return head;
-	}
-	assert(IS_MAGIC(head->magic));
-	if (head->offset) {
-		return (void*)((char*)head + head->offset);
-	}
 	return head;
 }
 
@@ -3755,7 +3749,7 @@ void* je_san_interior_must_check(void *_base, void *_ptr, size_t ptrsize) {
 		}
 		return _MASK1(ptr);
 	}
-	unsigned *head = _je_san_get_base2(_base);
+	unsigned *head = _je_san_get_base3(_base);
 	if (head == NULL) {
 		if (can_print_in_trace_fp()) {
 			fprintf(trace_fp, "making interior3: ptr:%p base:%p\n", ptr, base);
