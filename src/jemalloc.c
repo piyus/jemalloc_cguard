@@ -186,7 +186,7 @@ static inline void* get_fast_base_safe(size_t object, bool *large_offset) {
 		return NULL;
 	}
 
-	int magic_number;
+	int magic_number = 0;
 	asm volatile ("movl (%1), %0 \n\t"
 								"nop; nop; nop; nop; \n\t"
 								"nop; nop; nop; nop; \n\t" : 
@@ -3384,7 +3384,10 @@ static void *_je_san_get_base1(void *ptr) {
 	}
 	assert(IS_MAGIC(head->magic));
 	if (head->offset) {
-		return (void*)((char*)head + head->offset);
+		 head = (struct obj_header*)((char*)head + head->offset);
+	}
+	if (!IS_MAGIC(head->magic)) {
+		fprintf(trace_fp, "no-magic after offset :%p ptr:%p\n", head, ptr);
 	}
 	if (head->size >= MAX_OFFSET) {
 		add_large_bases(((size_t)ptr>>15), (size_t)head);
