@@ -3306,7 +3306,18 @@ void* je_san_interior(void *_base, void *_ptr) {
 	if (can_print_in_trace_fp()) {
 		fprintf(trace_fp, "%s: ptr:%p base:%p\n", __func__, _ptr, _base);
 	}
-	return (char*)get_interior_add((size_t)_ptr, (size_t)(_ptr-_base));
+	char *interior2 = (char*)get_interior_add((size_t)_ptr, (size_t)(_ptr-_base));
+
+	void *ptr = UNMASK(_ptr);
+	unsigned *head = _je_san_get_base(_base);
+	assert(head);
+	char *start = (char*)(head + 2);
+	char *interior1 = (char*)get_interior((size_t)ptr, (size_t)((char*)ptr-start));
+	if (interior1 != interior2) {
+		fprintf(trace_fp, "Interior1:%p Interior2:%p base:%p ptr:%p\n", interior1, interior2, _base, _ptr);
+		//abort3("hi");
+	}
+	return interior2;
 }
 
 static void *ptr_to_iptr(void *_ptr) {
@@ -3711,17 +3722,7 @@ void* je_san_check_size_limit_with_offset(void *_base, void *_ptr, void *_limit)
 	if (_ptr > _limit) {
 		return _MASK1(_ptr);
 	}
-	void *ptr = UNMASK(_ptr);
-	unsigned *head = _je_san_get_base(_base);
-	assert(head);
-	char *start = (char*)(head + 2);
-	char *interior1 = (char*)get_interior((size_t)ptr, (size_t)((char*)ptr-start));
-	char *interior2 = je_san_interior(_base, _ptr);
-	if (interior1 != interior2) {
-		fprintf(trace_fp, "Interior1:%p Interior2:%p base:%p ptr:%p limit:%p\n", interior1, interior2, _base, _ptr, _limit);
-		//abort3("hi");
-	}
-	return interior2;
+	return je_san_interior(_base, _ptr);
 }
 
 
