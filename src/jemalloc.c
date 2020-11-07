@@ -3388,6 +3388,7 @@ static void *_je_san_get_base1(void *ptr) {
 	}
 	if (!IS_MAGIC(head->magic)) {
 		fprintf(trace_fp, "no-magic after offset :%p ptr:%p\n", head, ptr);
+		abort3("hi");
 	}
 	if (head->size >= MAX_OFFSET) {
 		add_large_bases(((size_t)ptr>>15), (size_t)head);
@@ -3691,6 +3692,10 @@ void* je_san_interior_checked(void *_base, void *_ptr, size_t ptrsize) {
 		return _MASK1(ptr);
 	}
 
+	if (!IS_MAGIC(head[0])) {
+		fprintf(trace_fp, "_base:%p _ptr:%p head:%p\n", _base, _ptr, head);
+		abort3("hi");
+	}
 	assert(IS_MAGIC(head[0]));
 
 	unsigned size = head[1];
