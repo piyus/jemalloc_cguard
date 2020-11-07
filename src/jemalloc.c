@@ -3265,7 +3265,9 @@ static void *_je_san_get_base(void *ptr) {
 	if (head->offset) {
 		head = (struct obj_header*)((char*)head + head->offset);
 	}
-	add_large_bases(((size_t)ptr>>15), (size_t)head);
+	if (head->size >= MAX_OFFSET) {
+		add_large_bases(((size_t)ptr>>15), (size_t)head);
+	}
 	/*void *fbase = get_fast_base((size_t)ptr);
 	if (fbase) {
 		assert(head == fbase);
@@ -3373,7 +3375,9 @@ static void *_je_san_get_base1(void *ptr) {
 	if (head->offset) {
 		return (void*)((char*)head + head->offset);
 	}
-	add_large_bases(((size_t)ptr>>15), (size_t)head);
+	if (head->size >= MAX_OFFSET) {
+		add_large_bases(((size_t)ptr>>15), (size_t)head);
+	}
 	return head;
 }
 
@@ -3707,7 +3711,17 @@ void* je_san_check_size_limit_with_offset(void *_base, void *_ptr, void *_limit)
 	if (_ptr > _limit) {
 		return _MASK1(_ptr);
 	}
-	return je_san_interior(_base, _ptr);
+	void *ptr = UNMASK(_ptr);
+	unsigned *head = _je_san_get_base(_base);
+	assert(head);
+	char *start = (char*)(head + 2);
+	char *interior1 = (char*)get_interior((size_t)ptr, (size_t)((char*)ptr-start));
+	char *interior2 = je_san_interior(_base, _ptr);
+	if (interior1 != interior2) {
+		fprintf(trace_fp, "Interior1:%p Interior2:%p base:%p ptr:%p limit:%p\n", interior1, interior2, _base, _ptr, _limit);
+		//abort3("hi");
+	}
+	return interior2;
 }
 
 
@@ -5734,13 +5748,13 @@ je_free(void *_ptr) {
 	struct obj_header *head = __je_san_get_base(ptr);
 	assert(head);
 	assert(is_valid_obj_header(head));
-	size_t objhead = (size_t)(((char*)head) + head->offset);
+	struct obj_header *objhead = (struct obj_header*)(((char*)head) + head->offset);
 
 	assert(ptr == (void*)((char*)(&head[1]) + head->offset) || ptr == (void*)(&head[2]));
 	size_t size = get_size_from_obj_header(head);
 	remove_large_pointer(head, size);
-	if (size >= MAX_OFFSET) {
-		remove_large_base(objhead);
+	if (objhead->size >= MAX_OFFSET) {
+		remove_large_base((size_t)objhead);
 	}
 	_je_free(head);
 }
