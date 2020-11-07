@@ -4805,7 +4805,7 @@ void je_san_enable_mask() {
 
 void posix_signal_handler(int sig, siginfo_t *siginfo, void *arg) {
 	ucontext_t *context = (ucontext_t *)arg;
-  //malloc_printf("Address from where crash happen is %llx \n",context->uc_mcontext.gregs[REG_RIP]);
+  fprintf(trace_fp, "Address from where crash happen is %llx \n",context->uc_mcontext.gregs[REG_RIP]);
 	context->uc_mcontext.gregs[REG_RIP] = context->uc_mcontext.gregs[REG_RIP] + 9;
 	signal_handler_invoked = true;
 }
