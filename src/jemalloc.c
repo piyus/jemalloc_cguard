@@ -88,7 +88,7 @@ static size_t check_large_bases(size_t object)
 
 static inline void add_large_bases(size_t object, size_t base)
 {
-	assert(base <= object);
+	object = (object >> 15);
 	size_t key = base_key(object);
 	LargeBases[key].addr = object;
 	LargeBases[key].base = base;
@@ -3266,7 +3266,7 @@ static void *_je_san_get_base(void *ptr) {
 		head = (struct obj_header*)((char*)head + head->offset);
 	}
 	if (head->size >= MAX_OFFSET) {
-		add_large_bases(((size_t)ptr>>15), (size_t)head);
+		add_large_bases((size_t)ptr, (size_t)head);
 	}
 	/*void *fbase = get_fast_base((size_t)ptr);
 	if (fbase) {
@@ -3391,7 +3391,7 @@ static void *_je_san_get_base1(void *ptr) {
 		abort3("hi");
 	}
 	if (head->size >= MAX_OFFSET) {
-		add_large_bases(((size_t)ptr>>15), (size_t)head);
+		add_large_bases((size_t)ptr, (size_t)head);
 	}
 	return head;
 }
@@ -5625,8 +5625,12 @@ je_realloc(void *_ptr, size_t arg_size) {
 		head = (struct obj_header*)__je_san_get_base(ptr);
 		assert(head);
 		assert(is_valid_obj_header(head));
-		remove_large_pointer(head, get_size_from_obj_header(head));
+		size_t sz = get_size_from_obj_header(head);
+		remove_large_pointer(head, sz);
 		assert(ptr == (void*)(&head[1]));
+		if (sz >= MAX_OFFSET) {
+			remove_large_base((size_t)head);
+		}
 	}
 	void *newptr = _je_realloc(head, arg_size + OBJ_HEADER_SIZE);
 	add_large_pointer(newptr, arg_size + OBJ_HEADER_SIZE);
