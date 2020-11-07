@@ -3307,24 +3307,6 @@ void* je_san_interior(void *_base, void *_ptr) {
 	return (char*)get_interior_add((size_t)_ptr, (size_t)(_ptr-_base));
 }
 
-JEMALLOC_EXPORT
-void* je_san_interior5(void *_base, void *_ptr, void *_prev) {
-	if (is_invalid_ptr((size_t)_prev)) {
-		return _prev;
-	}
-
-	size_t mask = (((size_t)_base) ^ ((size_t)_ptr)) >> 48;
-	assert(mask == 0);
-	if (_base == _ptr) {
-		return _base;
-	}
-	if (can_print_in_trace_fp()) {
-		fprintf(trace_fp, "%s: ptr:%p base:%p\n", __func__, _ptr, _base);
-	}
-	return (char*)get_interior_add((size_t)_ptr, (size_t)(_ptr-_base));
-}
-
-
 static void *ptr_to_iptr(void *_ptr) {
 	void *ptr = UNMASK(_ptr);
 	void *base = _je_san_get_base3(ptr) + 8;
@@ -3718,6 +3700,14 @@ void* je_san_check_size_limit(void *_ptr, void *_limit) {
 		return _MASK1(_ptr);
 	}
 	return _ptr;
+}
+
+JEMALLOC_EXPORT
+void* je_san_check_size_limit_with_offset(void *_base, void *_ptr, void *_limit) {
+	if (_ptr > _limit) {
+		return _MASK1(_ptr);
+	}
+	return je_san_interior(_base, _ptr);
 }
 
 
