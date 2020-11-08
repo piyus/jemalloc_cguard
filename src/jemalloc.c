@@ -3298,6 +3298,10 @@ static void *_je_san_get_base3(void *ptr) {
 
 JEMALLOC_EXPORT
 void* je_san_interior(void *_base, void *_ptr, size_t ID) {
+	if (_base == NULL) {
+		fprintf(trace_fp, "_base:%p _ptr:%p ID:%zd\n", _base, _ptr, ID);
+		abort3("hi");
+	}
 	size_t mask = (((size_t)_base) ^ ((size_t)_ptr)) >> 48;
 	assert(mask == 0);
 	if (_base == _ptr) {
@@ -3323,7 +3327,7 @@ void* je_san_interior(void *_base, void *_ptr, size_t ID) {
 static void *ptr_to_iptr(void *_ptr) {
 	void *ptr = UNMASK(_ptr);
 	void *base = _je_san_get_base3(ptr) + 8;
-	return je_san_interior(base, ptr, -1);
+	return je_san_interior(base, ptr, 1000);
 }
 
 static void *__je_san_get_base1(void *ptr) {
@@ -3657,7 +3661,7 @@ static
 void* je_san_interior1(const void *_base, const void *_ptr) {
 	size_t offset = ((size_t)_base) >> 48;
 	_ptr = (const void*)((size_t)_ptr | (offset << 48));
-	return je_san_interior((void*)_base, (void*)_ptr, -1);
+	return je_san_interior((void*)_base, (void*)_ptr, 1001);
 }
 
 JEMALLOC_EXPORT
@@ -3727,10 +3731,11 @@ void* je_san_check_size_limit(void *_ptr, void *_limit) {
 
 JEMALLOC_EXPORT
 void* je_san_check_size_limit_with_offset(void *_base, void *_ptr, void *_limit) {
+	//fprintf(trace_fp, "base:%p ptr:%p limit:%p\n", _base, _ptr, _limit);
 	if (_ptr > _limit) {
 		return _MASK1(_ptr);
 	}
-	return je_san_interior(_base, _ptr, -1);
+	return je_san_interior(_base, _ptr, 1002);
 }
 
 
@@ -3886,12 +3891,14 @@ void* je_san_get_limit_check(void *_base) {
 	size_t offset = ((size_t)_base & (0xFFFFULL << 48));
 
 	if (base < MinGlobalAddr || is_invalid_ptr((size_t)_base)) {
-		return _base;
+		//fprintf(trace_fp, "base1:%p _limit:%p\n", _base, (void*)offset);
+		return (void*)offset;
 	}
 
 	unsigned *head = _je_san_get_base1(_base);
 	if (head == NULL) {
-		return _base;
+		//fprintf(trace_fp, "base2:%p _limit:%p\n", _base, (void*)offset);
+		return (void*)offset;
 	}
 
 	if (!IS_MAGIC(head[0])) {
@@ -3903,7 +3910,9 @@ void* je_san_get_limit_check(void *_base) {
 	unsigned size = head[1];
 	char *start = (char*)(head + 2);
 	char *end = start + size;
-	return (void*)((size_t)end | offset);
+	void *ret = (void*)((size_t)end | offset);
+	//fprintf(trace_fp, "base3:%p _limit:%p\n", _base, ret);
+	return ret;
 }
 
 JEMALLOC_EXPORT
@@ -3912,12 +3921,14 @@ void* je_san_get_limit_must_check(void *_base) {
 	size_t offset = ((size_t)_base & (0xFFFFULL << 48));
 
 	if (base < MinGlobalAddr || is_invalid_ptr((size_t)_base)) {
-		return _base;
+		//fprintf(trace_fp, "base11:%p _limit:%p\n", _base, (void*)offset);
+		return (void*)offset;
 	}
 
 	unsigned *head = _je_san_get_base3(_base);
 	if (head == NULL) {
-		return _base;
+		//fprintf(trace_fp, "base12:%p _limit:%p\n", _base, (void*)offset);
+		return (void*)offset;
 	}
 
 	if (!IS_MAGIC(head[0])) {
@@ -3929,7 +3940,9 @@ void* je_san_get_limit_must_check(void *_base) {
 	unsigned size = head[1];
 	char *start = (char*)(head + 2);
 	char *end = start + size;
-	return (void*)((size_t)end | offset);
+	void *ret = (void*)((size_t)end | offset);
+	//fprintf(trace_fp, "base13:%p _limit:%p\n", _base, ret);
+	return ret;
 }
 
 
@@ -4914,7 +4927,7 @@ char *je_strstr(const char *_haystack, const char *_needle) {
   if (len1 < len2) return NULL;
   for (size_t pos = 0; pos <= len1 - len2; pos++) {
     if (memcmp(haystack + pos, needle, len2) == 0)
-      return (pos == 0) ? (char*)_haystack : (char*)je_san_interior((void*)_haystack, (void*)_haystack + pos, -1);
+      return (pos == 0) ? (char*)_haystack : (char*)je_san_interior((void*)_haystack, (void*)_haystack + pos, 1003);
   }
   return NULL;
 }
