@@ -3880,6 +3880,58 @@ void* je_san_page_fault_limit(void *ptr, int line, char *name) {
 	return ptr + je_san_page_fault_len(ptr-4, line, name);
 }
 
+JEMALLOC_EXPORT
+void* je_san_get_limit_check(void *_base) {
+	void *base = UNMASK(_base);
+	size_t offset = ((size_t)_base & (0xFFFFULL << 48));
+
+	if (base < MinGlobalAddr || is_invalid_ptr((size_t)_base)) {
+		return _base;
+	}
+
+	unsigned *head = _je_san_get_base1(_base);
+	if (head == NULL) {
+		return _base;
+	}
+
+	if (!IS_MAGIC(head[0])) {
+		fprintf(trace_fp, "_base:%p head:%p\n", _base, head);
+		abort3("hi");
+	}
+	assert(IS_MAGIC(head[0]));
+
+	unsigned size = head[1];
+	char *start = (char*)(head + 2);
+	char *end = start + size;
+	return (void*)((size_t)end | offset);
+}
+
+JEMALLOC_EXPORT
+void* je_san_get_limit_must_check(void *_base) {
+	void *base = UNMASK(_base);
+	size_t offset = ((size_t)_base & (0xFFFFULL << 48));
+
+	if (base < MinGlobalAddr || is_invalid_ptr((size_t)_base)) {
+		return _base;
+	}
+
+	unsigned *head = _je_san_get_base3(_base);
+	if (head == NULL) {
+		return _base;
+	}
+
+	if (!IS_MAGIC(head[0])) {
+		fprintf(trace_fp, "_base:%p head:%p\n", _base, head);
+		abort3("hi");
+	}
+	assert(IS_MAGIC(head[0]));
+
+	unsigned size = head[1];
+	char *start = (char*)(head + 2);
+	char *end = start + size;
+	return (void*)((size_t)end | offset);
+}
+
 
 JEMALLOC_EXPORT
 void je_san_check2(void *_ptr1, void *_ptr2, size_t ptrsize) {
