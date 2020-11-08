@@ -3722,17 +3722,17 @@ void* je_san_interior_checked(void *_base, void *_ptr, size_t ptrsize, int ID) {
 }
 
 JEMALLOC_EXPORT
-void* je_san_check_size_limit(void *_ptr, void *_limit) {
-	if (_ptr > _limit) {
+void* je_san_check_size_limit(void *_ptr, void *_limit, size_t ptrsz) {
+	if (_ptr + ptrsz > _limit) {
 		return _MASK1(_ptr);
 	}
 	return _ptr;
 }
 
 JEMALLOC_EXPORT
-void* je_san_check_size_limit_with_offset(void *_base, void *_ptr, void *_limit) {
+void* je_san_check_size_limit_with_offset(void *_base, void *_ptr, void *_limit, size_t ptrsz) {
 	//fprintf(trace_fp, "base:%p ptr:%p limit:%p\n", _base, _ptr, _limit);
-	if (_ptr > _limit) {
+	if (_ptr + ptrsz > _limit) {
 		return _MASK1(_ptr);
 	}
 	return je_san_interior(_base, _ptr, 1002);
