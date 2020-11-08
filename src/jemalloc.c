@@ -3297,7 +3297,7 @@ static void *_je_san_get_base3(void *ptr) {
 }
 
 JEMALLOC_EXPORT
-void* je_san_interior(void *_base, void *_ptr) {
+void* je_san_interior(void *_base, void *_ptr, size_t ID) {
 	size_t mask = (((size_t)_base) ^ ((size_t)_ptr)) >> 48;
 	assert(mask == 0);
 	if (_base == _ptr) {
@@ -3323,7 +3323,7 @@ void* je_san_interior(void *_base, void *_ptr) {
 static void *ptr_to_iptr(void *_ptr) {
 	void *ptr = UNMASK(_ptr);
 	void *base = _je_san_get_base3(ptr) + 8;
-	return je_san_interior(base, ptr);
+	return je_san_interior(base, ptr, -1);
 }
 
 static void *__je_san_get_base1(void *ptr) {
@@ -3657,11 +3657,11 @@ static
 void* je_san_interior1(const void *_base, const void *_ptr) {
 	size_t offset = ((size_t)_base) >> 48;
 	_ptr = (const void*)((size_t)_ptr | (offset << 48));
-	return je_san_interior((void*)_base, (void*)_ptr);
+	return je_san_interior((void*)_base, (void*)_ptr, -1);
 }
 
 JEMALLOC_EXPORT
-void* je_san_interior_checked(void *_base, void *_ptr, size_t ptrsize) {
+void* je_san_interior_checked(void *_base, void *_ptr, size_t ptrsize, int ID) {
 	if (_base == _ptr) {
 		return _ptr;
 	}
@@ -3730,7 +3730,7 @@ void* je_san_check_size_limit_with_offset(void *_base, void *_ptr, void *_limit)
 	if (_ptr > _limit) {
 		return _MASK1(_ptr);
 	}
-	return je_san_interior(_base, _ptr);
+	return je_san_interior(_base, _ptr, -1);
 }
 
 
@@ -3779,7 +3779,7 @@ void* je_san_check_size(void *_ptr, size_t ptrsize) {
 
 
 JEMALLOC_EXPORT
-void* je_san_interior_must_check(void *_base, void *_ptr, size_t ptrsize) {
+void* je_san_interior_must_check(void *_base, void *_ptr, size_t ptrsize, size_t ID) {
 	void *ptr = UNMASK(_ptr);
 	void *base = UNMASK(_base);
 	if (ptr == NULL || base == NULL) {
@@ -4914,7 +4914,7 @@ char *je_strstr(const char *_haystack, const char *_needle) {
   if (len1 < len2) return NULL;
   for (size_t pos = 0; pos <= len1 - len2; pos++) {
     if (memcmp(haystack + pos, needle, len2) == 0)
-      return (pos == 0) ? (char*)_haystack : (char*)je_san_interior((void*)_haystack, (void*)_haystack + pos);
+      return (pos == 0) ? (char*)_haystack : (char*)je_san_interior((void*)_haystack, (void*)_haystack + pos, -1);
   }
   return NULL;
 }
