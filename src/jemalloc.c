@@ -4481,7 +4481,7 @@ int je_vsnprintf(char *s, size_t n, const char *fmt, va_list ap)
 
 JEMALLOC_EXPORT
 void je_obstack_free(struct obstack *h, void *_obj) {
-	char *obj = (char*)_obj;
+	char *obj = (char*)UNMASK(_obj);
   register struct _obstack_chunk *lp;	/* below addr of any objects in this chunk */
   register struct _obstack_chunk *plp;	/* point to previous chunk if any */
 
