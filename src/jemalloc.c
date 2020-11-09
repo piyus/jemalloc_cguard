@@ -2717,6 +2717,7 @@ void debug_break(void* v)
 #include <sys/stat.h>
 #define PATH_SZ 128
 
+#if 0
 static size_t
 getDataSecInfo(unsigned long long *Start, unsigned long long *End)
 {
@@ -2781,6 +2782,7 @@ out:
 	close(fd);
 	return 0;
 }
+#endif
 
 static int num_global_variables = 0;
 static int global_map_size = 0;
@@ -2954,6 +2956,7 @@ static void print_data_section() {
 
 extern char  etext, edata, end;
 
+#if 0
 static bool is_global(unsigned long long val) {
 	static unsigned long long DataStart = 0;
 	static unsigned long long DataEnd = 0;
@@ -2965,6 +2968,7 @@ static bool is_global(unsigned long long val) {
 	//malloc_printf("DataStart: %llx DataEnd:%llx\n", DataStart, DataEnd);
 	return val >= DataStart && val < DataEnd;
 }
+#endif
 
 #define ENTRY_TY 0
 #define EXIT_TY 1
@@ -2984,7 +2988,7 @@ set_trace_fp() {
 
 
 JEMALLOC_EXPORT
-void je_san_trace(char *_name, int line, int type, unsigned long long val1) {
+void je_san_trace(char *_name, int line, int type, unsigned long long val, unsigned long long _val) {
 	event_id++;
 	if (!can_print_in_trace_fp()) {
 		return;
@@ -2993,26 +2997,9 @@ void je_san_trace(char *_name, int line, int type, unsigned long long val1) {
 
 	static unsigned long long id = 0;
 	char *name = UNMASK(_name);
-	unsigned long long val2 = (unsigned long long)UNMASK(val1);
-	unsigned long long val;
-
-	if ((val2 >> 40) == 0x7f || is_global(val2)) {
-		val = 0;
-	}
-	else {
-		val = val2; // & 0xffff;
-	}
-
-	if ((val2 >> 40)) {
-		val = val1;
-	}
-	else {
-	  val = 0;
-	}
-
 
 	if (type == ENTRY_TY) {
-		fprintf(trace_fp, "[%lld] enter: %s():%d\n", id, name, line);
+		fprintf(trace_fp, "[%lld] enter: %s()(%p, %p) %d\n", id, name, (void*)val, (void*)_val, line);
 	}
 	else if (type == EXIT_TY) {
 		fprintf(trace_fp, "[%lld] exit: %s():%d -> %llx\n", id, name, line, val);
@@ -3025,7 +3012,7 @@ void je_san_trace(char *_name, int line, int type, unsigned long long val1) {
 			//fprintf(err_fp, "[%lld] ld: %s:%d -> %llx\n", id, name, line, val1);
 		//}
 		if (val) {
-			fprintf(trace_fp, "[%lld] load: %d -> %llx\n", id, line, val);
+			fprintf(trace_fp, "ld: %p = [%p] line:%d\n", (void*)val, (void*)_val, line);
 		}
 	}
 	else if (type == STORE_TY) {
@@ -3033,7 +3020,7 @@ void je_san_trace(char *_name, int line, int type, unsigned long long val1) {
 			//fprintf(err_fp, "[%lld] st: %s:%d -> %llx\n", id, name, line, val1);
 		//}
 		if (val) {
-			fprintf(trace_fp, "[%lld] store: %d -> %llx\n", id, line, val);
+			fprintf(trace_fp, "st: [%p] = %p line:%d\n", (void*)_val, (void*)val, line);
 		}
 	}
 	else if (type == PTR_TO_INT_TY) {
