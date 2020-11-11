@@ -3709,7 +3709,7 @@ void* je_san_interior_checked(void *_base, void *_ptr, size_t ptrsize, int ID) {
 }
 
 JEMALLOC_EXPORT
-void* je_san_check_size_limit(void *_ptr, void *_limit, size_t ptrsz) {
+void* je_san_check_size_limit(void *_ptr, size_t ptrsz, void *_limit) {
 	if (_ptr + ptrsz > _limit) {
 		return _MASK1(_ptr);
 	}
@@ -3717,7 +3717,7 @@ void* je_san_check_size_limit(void *_ptr, void *_limit, size_t ptrsz) {
 }
 
 JEMALLOC_EXPORT
-void* je_san_check_size_limit_with_offset(void *_base, void *_ptr, void *_limit, size_t ptrsz) {
+void* je_san_interior_limit(void *_base, void *_ptr, size_t ptrsz, void *_limit) {
 	//fprintf(trace_fp, "base:%p ptr:%p limit:%p\n", _base, _ptr, _limit);
 	if (_ptr + ptrsz > _limit) {
 		return _MASK1(_ptr);
@@ -3864,6 +3864,7 @@ unsigned je_san_page_fault_len(void *ptr, int line, char *name) {
 		}
 		//assert(ptr == (void*)optr);
 	}
+	//fprintf(trace_fp, "get_limit: %p %x\n", optr, *optr);
 	return (*optr) - offset;
 }
 
