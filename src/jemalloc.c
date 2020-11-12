@@ -4780,6 +4780,7 @@ void je_san_abort2(void *base, void *cur, void *limit, size_t ptrsz, void *calls
 	abort3("abort2");
 }
 
+
 JEMALLOC_EXPORT
 void je_san_abort3(void *base, void *cur, void *limit, size_t ptrsz, void *callsite) {
 	void *ptrlimit = cur + ptrsz;
@@ -4822,6 +4823,32 @@ void je_san_abort3(void *base, void *cur, void *limit, size_t ptrsz, void *calls
 	}
 	abort3("abort2");
 }
+
+JEMALLOC_EXPORT
+void je_san_abort2_fast(void *base, void *cur, void *limit) {
+	if (cur < base) {
+		char *_cur = (void*)UNMASK(cur);
+		char *orig_base = _je_san_get_base(base) + 8;
+		if (orig_base && _cur >= orig_base) {
+			return;
+		}
+	}
+	abort3("abort2");
+}
+
+JEMALLOC_EXPORT
+void je_san_abort3_fast(void *base, void *cur, void *limit) {
+	if (cur < base) {
+		char *_base = (void*)UNMASK(base);
+		char *_cur = (void*)UNMASK(cur);
+		char *orig_base = _je_san_get_base3(_base) + 8;
+		if (orig_base && _cur >= orig_base) {
+			return;
+		}
+	}
+	abort3("abort3");
+}
+
 
 extern char** environ;
 
