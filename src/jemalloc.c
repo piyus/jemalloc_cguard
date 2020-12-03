@@ -4825,7 +4825,7 @@ void je_san_abort3(void *base, void *cur, void *limit, size_t ptrsz, void *calls
 }
 
 JEMALLOC_EXPORT
-void je_san_abort2_fast(void *base, void *cur, void *limit) {
+void je_san_abort2_fast(void *base, void *cur, void *limit, void* callsite) {
 	if (cur < base) {
 		char *_cur = (void*)UNMASK(cur);
 		char *orig_base = _je_san_get_base(base) + 8;
@@ -4833,11 +4833,12 @@ void je_san_abort2_fast(void *base, void *cur, void *limit) {
 			return;
 		}
 	}
+	malloc_printf("base:%p cur:%p limit:%p callsite:%p\n", base, cur, limit, callsite);
 	abort3("abort2");
 }
 
 JEMALLOC_EXPORT
-void je_san_abort3_fast(void *base, void *cur, void *limit) {
+void je_san_abort3_fast(void *base, void *cur, void *limit, void *callsite) {
 	if (cur < base) {
 		char *_base = (void*)UNMASK(base);
 		char *_cur = (void*)UNMASK(cur);
@@ -4846,6 +4847,7 @@ void je_san_abort3_fast(void *base, void *cur, void *limit) {
 			return;
 		}
 	}
+	malloc_printf("base:%p cur:%p limit:%p callsite:%p\n", base, cur, limit, callsite);
 	abort3("abort3");
 }
 
