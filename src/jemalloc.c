@@ -3049,35 +3049,37 @@ void je_san_trace(char *_name, int line, int type, unsigned long long val, unsig
 #define MAX_STACK_PTRS 102400
 static __thread void *stack_ptrs[MAX_STACK_PTRS];
 static __thread int num_stack_ptrs = 0;
-static __thread void *callstack[MAX_STACK_PTRS];
-static __thread int num_callstack = 0;
+//static __thread void *callstack[MAX_STACK_PTRS];
+//static __thread int num_callstack = 0;
 
 JEMALLOC_EXPORT
-void* je_san_enter_scope() {
-	callstack[num_callstack++] = (void*)&stack_ptrs[num_stack_ptrs];
-	if (event_id > min_events) {
+void* je_san_enter_scope(int num_ptrs) {
+	//callstack[num_callstack++] = (void*)&stack_ptrs[num_stack_ptrs];
+	//if (event_id > min_events) {
 		//malloc_printf("enter_scope %d %p\n", num_stack_ptrs, &stack_ptrs[num_stack_ptrs]);
-	}
-	return &stack_ptrs[num_stack_ptrs];
+	//}
+	void *ret = &stack_ptrs[num_stack_ptrs];
+	num_stack_ptrs += num_ptrs;
+	return ret;
 }
 
 JEMALLOC_EXPORT
 void je_san_exit_scope(char *ptr) {
-	num_callstack--;
+	//num_callstack--;
 	num_stack_ptrs = (ptr - (char*)&stack_ptrs[0]) / sizeof(void*);
-	if (event_id > min_events) {
+	//if (event_id > min_events) {
 		//malloc_printf("exit_scope :%d %p\n", num_stack_ptrs, ptr);
-	}
-	assert(callstack[num_callstack] == (void*)ptr);
+	//}
+	//assert(callstack[num_callstack] == (void*)ptr);
 }
 
 JEMALLOC_EXPORT
 void je_san_restore_scope(char *ptr) {
-	assert(num_callstack > 0);
+	/*assert(num_callstack > 0);
 	while (callstack[num_callstack-1] != ptr) {
 		num_callstack--;
 		assert(num_callstack > 0);
-	}
+	}*/
 	void *top_ptr = (void*)&ptr;
 	int i;
 	for (i = num_stack_ptrs-1; i >= 0 && stack_ptrs[i] <= top_ptr; i--) {
@@ -3096,6 +3098,7 @@ void je_san_restore_scope(char *ptr) {
 // change llvm before changing name
 JEMALLOC_EXPORT
 void je_san_record_stack_pointer(void *ptr) {
+	assert(0);
 	assert(num_stack_ptrs < MAX_STACK_PTRS);
 	assert(ptr);
 	stack_ptrs[num_stack_ptrs] = ptr;
