@@ -3877,6 +3877,11 @@ void* je_san_page_fault_limit(void *ptr, int line, char *name) {
 }
 
 JEMALLOC_EXPORT
+void* je_san_page_fault_limit1(void *ptr) {
+	return ptr + je_san_page_fault_len(ptr-4, 0, "a");
+}
+
+JEMALLOC_EXPORT
 void* je_san_get_limit_check(void *_base) {
 	void *base = UNMASK(_base);
 	size_t offset = ((size_t)_base & (0xFFFFULL << 48));
