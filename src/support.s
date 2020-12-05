@@ -42,6 +42,7 @@ fasan_check_interior:
 
 	cmp %rdx, %rsi
 	jae 2f
+
 	cmp $0x7FFF, %rax
 	jb 3f
 
@@ -67,6 +68,8 @@ fasan_check_interior:
 	pop %rcx
 	pop %rdi
 
+	cmp $0, %rax
+	je 3f
 
 	cmp %rax, %rsi
 	jb 3f

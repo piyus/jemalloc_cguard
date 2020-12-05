@@ -3287,11 +3287,6 @@ static void *_je_san_get_base3(void *ptr) {
 	return head;
 }
 
-JEMALLOC_EXPORT
-void *je_san_base(void *_base)
-{
-	return _je_san_get_base(_base) + 8;
-}
 
 JEMALLOC_EXPORT
 void* je_san_interior(void *_base, void *_ptr, size_t ID) {
@@ -3396,6 +3391,14 @@ static void *_je_san_get_base1(void *ptr) {
 	}
 	return head;
 }
+
+JEMALLOC_EXPORT
+void *je_san_base(void *_base)
+{
+	void *ret = _je_san_get_base1(_base);
+	return (ret == NULL) ? ret : ret+8;
+}
+
 
 JEMALLOC_EXPORT JEMALLOC_ALLOCATOR JEMALLOC_RESTRICT_RETURN
 void JEMALLOC_NOTHROW *
