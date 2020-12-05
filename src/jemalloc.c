@@ -3265,6 +3265,7 @@ static void *_je_san_get_base(void *ptr) {
 	return head;
 }
 
+
 static void *_je_san_get_base3(void *ptr) {
 
 	size_t object = (size_t)ptr;
@@ -3284,6 +3285,12 @@ static void *_je_san_get_base3(void *ptr) {
 		head = (struct obj_header*)((char*)head + head->offset);
 	}
 	return head;
+}
+
+JEMALLOC_EXPORT
+void *je_san_base(void *_base)
+{
+	return _je_san_get_base(_base) + 8;
 }
 
 JEMALLOC_EXPORT
