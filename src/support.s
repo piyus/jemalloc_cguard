@@ -2,11 +2,64 @@
 .globl fasan_limit
 .globl fasan_interior
 .globl fasan_check_interior
+.globl fasan_bounds
 .extern san_page_fault_limit1
 .extern san_base
+.extern abort
+
+#ARGS: rdi, rsi, rdx, rcx, r8, r9
+#CALLEE-SAVED: RBX, R12-R15, RBP
 
 #fasan_interior(char *base, char *ptr)
 #fasan_check_interior(char *base, char *ptr, size_t ptrsz, char *limit);
+#fasan_bounds(char *base, char *ptr, char *ptrlimit, char *limit);
+
+fasan_bounds:
+
+	cmp %rdx, %rcx
+	jb 3f
+
+	mov %rdi, %rdx
+	shr $49, %rdx
+	sub %rdx, %rdi
+
+	cmp %rdi, %rsi
+	jae 1f
+
+	push %rax
+	push %rsi
+	push %r8
+	push %r9
+	push %r10
+	push %r11
+
+
+	call san_base
+	mov %rax, %rdx
+
+	pop %r11
+	pop %r10
+	pop %r9
+	pop %r8
+	pop %rsi
+	pop %rax
+
+
+	cmp $0, %rdx
+	je 3f
+
+	shl $16, %rsi
+	shr $16, %rsi
+
+	cmp %rdx, %rsi
+	jb 3f
+
+1:
+	ret
+3:
+	call abort
+	ret
+
 
 fasan_interior:
 	mov %rdi, %rax
@@ -106,7 +159,12 @@ fasan_check_interior:
 	cmp $0, %rax
 	je 3f
 
-	cmp %rax, %rsi
+	mov %rsi, %rdx
+
+	shl $16, %rdx
+	shr $16, %rdx
+
+	cmp %rax, %rdx
 	jb 3f
 
 	mov %rdi, %rax
