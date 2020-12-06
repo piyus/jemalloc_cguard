@@ -3395,8 +3395,8 @@ static void *_je_san_get_base1(void *ptr) {
 JEMALLOC_EXPORT
 void *je_san_base(void *_base)
 {
-	void *ret = _je_san_get_base1(_base);
-	ret = (void*)((size_t)ret & 0xFFFFFFFFFFFFULL);
+	void *base = UNMASK(_base);
+	void *ret = __je_san_get_base1(base);
 	return (ret == NULL) ? ret : ret+8;
 }
 
