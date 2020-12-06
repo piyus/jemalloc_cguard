@@ -46,22 +46,22 @@ fasan_check_interior:
 	cmp $0x7FFF, %rax
 	jb 3f
 
-	sub     $16, %rsp
-	movdqu  %xmm0, (%rsp)
-	sub     $16, %rsp
-	movdqu  %xmm1, (%rsp)
-	sub     $16, %rsp
-	movdqu  %xmm2, (%rsp)
-	sub     $16, %rsp
-	movdqu  %xmm3, (%rsp)
-	sub     $16, %rsp
-	movdqu  %xmm4, (%rsp)
-	sub     $16, %rsp
-	movdqu  %xmm5, (%rsp)
-	sub     $16, %rsp
-	movdqu  %xmm6, (%rsp)
-	sub     $16, %rsp
-	movdqu  %xmm7, (%rsp)
+#	sub     $16, %rsp
+#	movdqu  %xmm0, (%rsp)
+#	sub     $16, %rsp
+#	movdqu  %xmm1, (%rsp)
+#	sub     $16, %rsp
+#	movdqu  %xmm2, (%rsp)
+#	sub     $16, %rsp
+#	movdqu  %xmm3, (%rsp)
+#	sub     $16, %rsp
+#	movdqu  %xmm4, (%rsp)
+#	sub     $16, %rsp
+#	movdqu  %xmm5, (%rsp)
+#	sub     $16, %rsp
+#	movdqu  %xmm6, (%rsp)
+#	sub     $16, %rsp
+#	movdqu  %xmm7, (%rsp)
 
 
 	push %rdi
@@ -85,22 +85,22 @@ fasan_check_interior:
 	pop %rcx
 	pop %rdi
 
-	movdqu  (%rsp), %xmm7
-	add     $16, %rsp
-	movdqu  (%rsp), %xmm6
-	add     $16, %rsp
-	movdqu  (%rsp), %xmm5
-	add     $16, %rsp
-	movdqu  (%rsp), %xmm4
-	add     $16, %rsp
-	movdqu  (%rsp), %xmm3
-	add     $16, %rsp
-	movdqu  (%rsp), %xmm2
-	add     $16, %rsp
-	movdqu  (%rsp), %xmm1
-	add     $16, %rsp
-	movdqu  (%rsp), %xmm0
-	add     $16, %rsp
+#	movdqu  (%rsp), %xmm7
+#	add     $16, %rsp
+#	movdqu  (%rsp), %xmm6
+#	add     $16, %rsp
+#	movdqu  (%rsp), %xmm5
+#	add     $16, %rsp
+#	movdqu  (%rsp), %xmm4
+#	add     $16, %rsp
+#	movdqu  (%rsp), %xmm3
+#	add     $16, %rsp
+#	movdqu  (%rsp), %xmm2
+#	add     $16, %rsp
+#	movdqu  (%rsp), %xmm1
+#	add     $16, %rsp
+#	movdqu  (%rsp), %xmm0
+#	add     $16, %rsp
 
 
 	cmp $0, %rax
@@ -144,22 +144,22 @@ fasan_limit:
 	cmp $0x7FFF, %rax
 	jl 1f
 	
-	sub     $16, %rsp
-	movdqu  %xmm0, (%rsp)
-	sub     $16, %rsp
-	movdqu  %xmm1, (%rsp)
-	sub     $16, %rsp
-	movdqu  %xmm2, (%rsp)
-	sub     $16, %rsp
-	movdqu  %xmm3, (%rsp)
-	sub     $16, %rsp
-	movdqu  %xmm4, (%rsp)
-	sub     $16, %rsp
-	movdqu  %xmm5, (%rsp)
-	sub     $16, %rsp
-	movdqu  %xmm6, (%rsp)
-	sub     $16, %rsp
-	movdqu  %xmm7, (%rsp)
+#	sub     $16, %rsp
+#	movdqu  %xmm0, (%rsp)
+#	sub     $16, %rsp
+#	movdqu  %xmm1, (%rsp)
+#	sub     $16, %rsp
+#	movdqu  %xmm2, (%rsp)
+#	sub     $16, %rsp
+#	movdqu  %xmm3, (%rsp)
+#	sub     $16, %rsp
+#	movdqu  %xmm4, (%rsp)
+#	sub     $16, %rsp
+#	movdqu  %xmm5, (%rsp)
+#	sub     $16, %rsp
+#	movdqu  %xmm6, (%rsp)
+#	sub     $16, %rsp
+#	movdqu  %xmm7, (%rsp)
 
 
 	push %rcx
@@ -181,22 +181,22 @@ fasan_limit:
 	pop %rdx
 	pop %rcx
 
-	movdqu  (%rsp), %xmm7
-	add     $16, %rsp
-	movdqu  (%rsp), %xmm6
-	add     $16, %rsp
-	movdqu  (%rsp), %xmm5
-	add     $16, %rsp
-	movdqu  (%rsp), %xmm4
-	add     $16, %rsp
-	movdqu  (%rsp), %xmm3
-	add     $16, %rsp
-	movdqu  (%rsp), %xmm2
-	add     $16, %rsp
-	movdqu  (%rsp), %xmm1
-	add     $16, %rsp
-	movdqu  (%rsp), %xmm0
-	add     $16, %rsp
+#	movdqu  (%rsp), %xmm7
+#	add     $16, %rsp
+#	movdqu  (%rsp), %xmm6
+#	add     $16, %rsp
+#	movdqu  (%rsp), %xmm5
+#	add     $16, %rsp
+#	movdqu  (%rsp), %xmm4
+#	add     $16, %rsp
+#	movdqu  (%rsp), %xmm3
+#	add     $16, %rsp
+#	movdqu  (%rsp), %xmm2
+#	add     $16, %rsp
+#	movdqu  (%rsp), %xmm1
+#	add     $16, %rsp
+#	movdqu  (%rsp), %xmm0
+#	add     $16, %rsp
 
 
 
