@@ -130,9 +130,9 @@ C_SRCS := $(srcroot)src/jemalloc.c \
 ifeq ($(enable_zone_allocator), 1)
 C_SRCS += $(srcroot)src/zone.c
 endif
-S_SRCS := 
+S_SRCS := $(srcroot)src/support.s
 ifeq ($(IMPORTLIB),$(SO))
-STATIC_LIBS := $(objroot)lib/$(LIBJEMALLOC).$(A)
+STATIC_LIBS := $(objroot)lib/$(LIBJEMALLOC).$(A) $(objroot)lib/libsupport.$(A)
 endif
 ifdef PIC_CFLAGS
 STATIC_LIBS += $(objroot)lib/$(LIBJEMALLOC)_pic.$(A)
@@ -425,13 +425,15 @@ ifneq ($(SOREV),$(SO))
 	ln -sf $(<F) $@
 endif
 
-$(objroot)lib/$(LIBJEMALLOC).$(SOREV) : $(S_OBJS) $(if $(PIC_CFLAGS),$(C_PIC_OBJS),$(C_OBJS)) $(if $(PIC_CFLAGS),$(CPP_PIC_OBJS),$(CPP_OBJS))
+$(objroot)lib/$(LIBJEMALLOC).$(SOREV) : $(if $(PIC_CFLAGS),$(C_PIC_OBJS),$(C_OBJS)) $(if $(PIC_CFLAGS),$(CPP_PIC_OBJS),$(CPP_OBJS))
 	@mkdir -p $(@D)
 	$(CC) $(DSO_LDFLAGS) $(call RPATH,$(RPATH_EXTRA)) $(LDTARGET) $+ $(LDFLAGS) $(LIBS) $(EXTRA_LDFLAGS)
 
-$(objroot)lib/$(LIBJEMALLOC)_pic.$(A) : $(C_PIC_OBJS) $(S_OBJS) $(CPP_PIC_OBJS)
-$(objroot)lib/$(LIBJEMALLOC).$(A) : $(C_OBJS) $(S_OBJS) $(CPP_OBJS)
-$(objroot)lib/$(LIBJEMALLOC)_s.$(A) : $(C_OBJS) $(S_OBJS) $(CPP_OBJS)
+$(objroot)lib/$(LIBJEMALLOC)_pic.$(A) : $(C_PIC_OBJS) $(CPP_PIC_OBJS)
+$(objroot)lib/$(LIBJEMALLOC).$(A) : $(C_OBJS) $(CPP_OBJS)
+$(objroot)lib/$(LIBJEMALLOC)_s.$(A) : $(C_OBJS) $(CPP_OBJS)
+$(objroot)lib/libsupport.$(A) : $(S_OBJS)
+
 
 $(STATIC_LIBS):
 	@mkdir -p $(@D)
