@@ -130,7 +130,7 @@ C_SRCS := $(srcroot)src/jemalloc.c \
 ifeq ($(enable_zone_allocator), 1)
 C_SRCS += $(srcroot)src/zone.c
 endif
-S_SRCS := $(srcroot)src/support.s
+S_SRCS := 
 ifeq ($(IMPORTLIB),$(SO))
 STATIC_LIBS := $(objroot)lib/$(LIBJEMALLOC).$(A)
 endif
