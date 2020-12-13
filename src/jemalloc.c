@@ -3432,6 +3432,8 @@ void* je_san_get_limit(void *ptr) {
 	if (head->offset) {
 		head = (struct obj_header*)((char*)head + head->offset);
 	}
+	return (void*)(head+1);
+#if 0
 	char *limit = (char*)(head+1) + head->size;
 	if (ptr != ptr1) {
 		size_t offset = get_offset_from_ptr((size_t)ptr);
@@ -3441,6 +3443,7 @@ void* je_san_get_limit(void *ptr) {
 		limit = (char*)get_interior((size_t)limit, offset);
 	}
 	return limit;
+#endif
 }
 
 JEMALLOC_EXPORT
@@ -3884,28 +3887,29 @@ unsigned je_san_page_fault_len(void *ptr, int line, char *name) {
 
 JEMALLOC_EXPORT
 void* je_san_page_fault_limit(void *ptr, int line, char *name) {
+	assert(0);
 	return ptr + je_san_page_fault_len(ptr-4, line, name);
 }
 
 JEMALLOC_EXPORT
 void* je_san_page_fault_limit1(void *ptr) {
-	return ptr + je_san_page_fault_len(ptr-4, 0, "a");
+	return _je_san_get_base(ptr) + 8;
 }
 
 JEMALLOC_EXPORT
 void* je_san_get_limit_check(void *_base) {
 	void *base = UNMASK(_base);
-	size_t offset = ((size_t)_base & (0xFFFFULL << 48));
+	//size_t offset = ((size_t)_base & (0xFFFFULL << 48));
 
 	if (base < MinGlobalAddr || is_invalid_ptr((size_t)_base)) {
 		//fprintf(trace_fp, "base1:%p _limit:%p\n", _base, (void*)offset);
-		return (void*)offset;
+		return NULL; //(void*)offset;
 	}
 
 	unsigned *head = _je_san_get_base1(_base);
 	if (head == NULL) {
 		//fprintf(trace_fp, "base2:%p _limit:%p\n", _base, (void*)offset);
-		return (void*)offset;
+		return NULL; //(void*)offset;
 	}
 
 	if (!IS_MAGIC(head[0])) {
@@ -3914,28 +3918,31 @@ void* je_san_get_limit_check(void *_base) {
 	}
 	assert(IS_MAGIC(head[0]));
 
+	return head + 2;
+#if 0
 	unsigned size = head[1];
 	char *start = (char*)(head + 2);
 	char *end = start + size;
 	void *ret = (void*)((size_t)end | offset);
 	//fprintf(trace_fp, "base3:%p _limit:%p\n", _base, ret);
 	return ret;
+#endif
 }
 
 JEMALLOC_EXPORT
 void* je_san_get_limit_must_check(void *_base) {
 	void *base = UNMASK(_base);
-	size_t offset = ((size_t)_base & (0xFFFFULL << 48));
+	//size_t offset = ((size_t)_base & (0xFFFFULL << 48));
 
 	if (base < MinGlobalAddr || is_invalid_ptr((size_t)_base)) {
 		//fprintf(trace_fp, "base11:%p _limit:%p\n", _base, (void*)offset);
-		return (void*)offset;
+		return NULL; //(void*)offset;
 	}
 
 	unsigned *head = _je_san_get_base3(_base);
 	if (head == NULL) {
 		//fprintf(trace_fp, "base12:%p _limit:%p\n", _base, (void*)offset);
-		return (void*)offset;
+		return NULL; //(void*)offset;
 	}
 
 	if (!IS_MAGIC(head[0])) {
@@ -3943,6 +3950,9 @@ void* je_san_get_limit_must_check(void *_base) {
 		abort3("hi");
 	}
 	assert(IS_MAGIC(head[0]));
+
+	return head + 2;
+#if 0
 
 	unsigned size = head[1];
 	char *start = (char*)(head + 2);
@@ -3950,6 +3960,7 @@ void* je_san_get_limit_must_check(void *_base) {
 	void *ret = (void*)((size_t)end | offset);
 	//fprintf(trace_fp, "base13:%p _limit:%p\n", _base, ret);
 	return ret;
+#endif
 }
 
 
