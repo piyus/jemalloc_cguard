@@ -4758,6 +4758,7 @@ static void myfunc3(void)
 
 JEMALLOC_EXPORT
 void je_san_abort2(void *base, void *cur, void *limit, size_t ptrsz, void *callsite) {
+	assert(0);
 	void *ptrlimit = cur + ptrsz;
 	if (UNMASK(base) < (char*)0x80000000 /*|| is_stack_ptr(UNMASK(base))*/) {
 		//return;
@@ -4813,6 +4814,7 @@ void je_san_abort2(void *base, void *cur, void *limit, size_t ptrsz, void *calls
 
 JEMALLOC_EXPORT
 void je_san_abort3(void *base, void *cur, void *limit, size_t ptrsz, void *callsite) {
+	assert(0);
 	void *ptrlimit = cur + ptrsz;
 	if (UNMASK(base) < (char*)0x80000000 /*|| is_stack_ptr(UNMASK(base))*/) {
 		//return;
