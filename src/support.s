@@ -28,6 +28,9 @@ fasan_check_size:
 	mov %rdi, %rax
 	ret
 1:
+	shr $48, %rdx
+	jne 2f
+
 	movabs $(1ULL<<48), %rax
 	or %rdi, %rax
 	ret
@@ -66,23 +69,23 @@ fasan_bounds:
 
 fasan_interior:
 	mov %rdi, %rax
-	shr $49, %rax
-	cmp $0x7FFF, %rax
-	jae 1f
+	shr $48, %rax
+	jne 3f
+
+	shl $15, %rsi
+	shr $15, %rsi
 
 	sub %rsi, %rdi
 	neg %rdi
-	add %rdi, %rax
-	mov $0x7FFF, %rdi
+	mov $0x7FFF, %rax
 	cmp %rdi, %rax
 	cmova %rdi, %rax
-  shl $15, %rsi
-  shr $15, %rsi
 	shl $49, %rax
-	or %rax, %rsi
+	or %rsi, %rax
+	ret
 
-1:
-	mov %rsi, %rax
+3:
+	int3
 	ret
 
 fasan_check_interior:
