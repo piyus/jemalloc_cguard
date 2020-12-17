@@ -142,11 +142,6 @@ fasan_check_size:
 	ret
 
 fasan_bounds:
-	shl $15, %rsi
-	shr $15, %rsi
-
-	shl $15, %rdx
-	shr $15, %rdx
 
 	cmp %rdx, %rcx
 	jb 3f
@@ -154,17 +149,19 @@ fasan_bounds:
 	cmp %rdi, %rsi
 	jb 3f
 
-	movw -8(%rdi), %si
-	cmp $0xface, %si
-	jne 2f
-
-	shr $48, %rdi
+	shr $48, %rsi
 	jne 2f
 
 	shr $48, %rcx
 	jne 2f
 
+	shr $48, %rdx
+	jne 2f
 
+
+	movw -8(%rdi), %si
+	cmp $0xface, %si
+	jne 2f
 
 	ret
 3:
@@ -175,11 +172,6 @@ fasan_bounds:
 	ret
 
 fasan_bounds1:
-	shl $15, %rsi
-	shr $15, %rsi
-
-	shl $15, %rdx
-	shr $15, %rdx
 
 	cmp %rdx, %rcx
 	jb 3f
@@ -187,13 +179,17 @@ fasan_bounds1:
 	cmp %rdi, %rsi
 	jb 3f
 
+	shr $48, %rsi
+	jne 2f
+
+	shr $48, %rdx
+	jne 2f
+
 	shr $48, %rdi
 	jne 2f
 
 	shr $48, %rcx
 	jne 2f
-
-
 
 	ret
 3:
@@ -213,9 +209,9 @@ fasan_interior:
 	cmp $0xface, %ax
 	jne 3f
 
-
-	shl $15, %rsi
-	shr $15, %rsi
+	mov %rsi, %rax
+	shr $49, %rax
+	jne 3f
 
 	sub %rsi, %rdi
 	neg %rdi
@@ -235,9 +231,10 @@ fasan_interior1:
 	shr $48, %rax
 	jne 3f
 
+	mov %rsi, %rax
+	shr $49, %rax
+	jne 3f
 
-	shl $15, %rsi
-	shr $15, %rsi
 
 	sub %rsi, %rdi
 	neg %rdi
@@ -261,8 +258,9 @@ fasan_check_interior:
 	shr $48, %rax
 	jne 2f
 
-	shl $15, %rsi
-	shr $15, %rsi
+	mov %rsi, %rax
+	shr $49, %rax
+	jne 2f
 
 	add %rsi, %rdx
 
@@ -304,8 +302,9 @@ fasan_check_interior1:
 	shr $48, %rax
 	jne 2f
 
-	shl $15, %rsi
-	shr $15, %rsi
+	mov %rsi, %rax
+	shr $49, %rax
+	jne 2f
 
 	add %rsi, %rdx
 
