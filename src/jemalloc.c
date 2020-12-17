@@ -32,6 +32,7 @@ static unsigned long long event_id = 1;
 static unsigned long long min_events = 0xffff4800000000ULL;
 static int trace_count = 0;
 static /*__thread*/ bool signal_handler_invoked = false;
+extern void *__text_start, *__text_end;
 
 #define MAX_FAULTY_PAGES 4096
 #define PAGE_SHIFT 12
@@ -199,6 +200,9 @@ static inline void* get_fast_base_safe(size_t object, bool *large_offset) {
 	}
 
 	if (magic_number != MAGIC_NUMBER) {
+		/*if ((void*)head < __text_start || (void*)head >= __text_end) {
+			assert(0);
+		}*/
 		return NULL;
 	}
 	return head;
@@ -2819,13 +2823,17 @@ static void initialize_globals(struct obj_header *start, struct obj_header *end)
 	}
 }
 
-static void *MinGlobalAddr = (void*)0xFFFFFFFFFFFFULL;
+extern void *MinGlobalAddr;
 
 static void
 initialize_sections()
 {
 	char Exec[PATH_SZ];
 	ssize_t Count = readlink( "/proc/self/exe", Exec, PATH_SZ);
+
+	MinGlobalAddr = (void*)0xFFFFFFFFFFFFULL;
+	__text_start = NULL;
+	__text_end = NULL;
 
 	if (Count == -1) {
 		return;
@@ -2874,6 +2882,10 @@ initialize_sections()
 				}
 				initialize_globals(start, end);
 			}
+		}
+		else {
+			__text_start = (void*)Shdr[i].sh_addr;
+			__text_end = (void*)(Shdr[i].sh_addr + Shdr[i].sh_size);
 		}
 	}
 
@@ -4927,7 +4939,7 @@ void je_san_enable_mask() {
 void posix_signal_handler(int sig, siginfo_t *siginfo, void *arg) {
 	ucontext_t *context = (ucontext_t *)arg;
   fprintf(trace_fp, "Address from where crash happen is %llx \n",context->uc_mcontext.gregs[REG_RIP]);
-	context->uc_mcontext.gregs[REG_RIP] = context->uc_mcontext.gregs[REG_RIP] + 9;
+	context->uc_mcontext.gregs[REG_RIP] = context->uc_mcontext.gregs[REG_RIP] + 8;
 	signal_handler_invoked = true;
 }
 
