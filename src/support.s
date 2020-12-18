@@ -142,6 +142,7 @@ fasan_check_size:
 	ret
 
 fasan_bounds:
+	int3
 
 	cmp %rdx, %rcx
 	jb 3f
@@ -172,6 +173,7 @@ fasan_bounds:
 	ret
 
 fasan_bounds1:
+	int3
 
 	cmp %rdx, %rcx
 	jb 3f
@@ -201,6 +203,7 @@ fasan_bounds1:
 
 
 fasan_interior:
+	int3
 	mov %rdi, %rax
 	shr $48, %rax
 	jne 3f
@@ -227,6 +230,7 @@ fasan_interior:
 	ret
 
 fasan_interior1:
+	int3
 	mov %rdi, %rax
 	shr $48, %rax
 	jne 3f
@@ -250,6 +254,7 @@ fasan_interior1:
 	ret
 
 fasan_check_interior:
+	int3
 	mov %rdi, %rax
 	shr $48, %rax
 	jne 2f
@@ -294,6 +299,7 @@ fasan_check_interior:
 
 
 fasan_check_interior1:
+	int3
 	mov %rdi, %rax
 	shr $48, %rax
 	jne 2f
