@@ -120,6 +120,7 @@ fasan_limit_check:
 	
 
 fasan_check_size:
+	int3
 	mov %rdi, %rax
 	shl $15, %rax
 	shr $15, %rax
