@@ -19,8 +19,10 @@
 #include "jemalloc/internal/sz.h"
 #include "jemalloc/internal/ticker.h"
 #include "jemalloc/internal/util.h"
-#include <obstack.h>
 
+#include "largemalloc.c"
+
+#include <obstack.h>
 #undef obstack_free
 
 #define ALIGN_PAD(y) ((size_t)(y)-1)
