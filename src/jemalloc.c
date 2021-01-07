@@ -23,6 +23,8 @@
 
 #undef obstack_free
 
+#include "largemalloc.c"
+
 #define ALIGN_PAD(y) ((size_t)(y)-1)
 #define ALIGN_MASK(y) (~ALIGN_PAD(y))
 #define JE_ALIGN(x, y) (char*)(((size_t)(x) + ALIGN_PAD(y)) & ALIGN_MASK(y))
@@ -266,7 +268,7 @@ static bool need_tracking(unsigned long long val) {
 }
 
 static void add_large_pointer(void *ptr, size_t size) {
-	if (size > SC_SMALL_MAXCLASS) {
+	if (size > SC_SMALL_MAXCLASS && size < MAX_OFFSET) {
 		tsd_t *tsd = tsd_fetch_min();
 		tsdn_t *tsdn = tsd_tsdn(tsd);
 		assert(tsdn);
@@ -279,7 +281,7 @@ static void add_large_pointer(void *ptr, size_t size) {
 }
 
 static void remove_large_pointer(void *ptr, size_t size) {
-	if (size > SC_SMALL_MAXCLASS) {
+	if (size > SC_SMALL_MAXCLASS && size < MAX_OFFSET) {
 		tsd_t *tsd = tsd_fetch_min();
 		tsdn_t *tsdn = tsd_tsdn(tsd);
 		assert(tsdn);
@@ -3202,7 +3204,21 @@ static void *__je_san_get_base(void *ptr) {
 	tsdn_t *tsdn = tsd_tsdn(tsd);
 	assert(tsdn);
 	char *ptr_page = (char*)ptr;
-	extent_t *e = iealloc(tsdn, ptr_page);
+	//extent_t *e = iealloc(tsdn, ptr_page);
+
+	rtree_ctx_t rtree_ctx_fallback;
+  rtree_ctx_t *rtree_ctx = tsdn_rtree_ctx(tsdn, &rtree_ctx_fallback);
+
+  extent_t *e = rtree_extent_read(tsdn, &extents_rtree, rtree_ctx,
+      (uintptr_t)ptr_page, false);
+
+	if (e == NULL) {
+		void *ret = san_largeheader(ptr);
+		assert(ret);
+		return ret;
+	}
+
+
 	/*if (e == NULL) {
 		ptr_page = search_large_pointer(ptr);
 		assert(ptr_page);
@@ -3313,7 +3329,7 @@ static void *__je_san_get_base1(void *ptr) {
 
 	//extent_t *e = iealloc(tsdn, ptr_page);
 	if (!e) {
-		return NULL;
+		return san_largeheader(ptr);
 	}
 	assert(e);
 	char *eaddr = extent_addr_get(e);
@@ -3368,7 +3384,14 @@ je_malloc(size_t size) {
 	if (size == 0) {
 		return NULL;
 	}
-	void *ret = _je_malloc(size + OBJ_HEADER_SIZE);
+
+	void *ret;
+	if (size < MAX_OFFSET) {
+		ret = _je_malloc(size + OBJ_HEADER_SIZE);
+	}
+	else {
+		ret = san_largealloc(size + OBJ_HEADER_SIZE);
+	}
 	assert(ret);
 	add_large_pointer(ret, size + OBJ_HEADER_SIZE);
 	if (can_print_in_trace_fp()) {
@@ -5309,7 +5332,21 @@ je_aligned_alloc(size_t alignment, size_t _size) {
 	}
 	size_t size = _size + ALIGN_PAD(alignment);
 	size_t offset;
-	char *ret = je_malloc(size);
+
+	char *ret;
+
+	if (_size < MAX_OFFSET) {
+		ret = _je_malloc(size + OBJ_HEADER_SIZE);
+	}
+	else {
+		ret = san_largealloc(size + OBJ_HEADER_SIZE);
+	}
+	assert(ret);
+	add_large_pointer(ret, size + OBJ_HEADER_SIZE);
+	ret = make_obj_header(ret, size, 0, 0);
+
+
+
 	char *head = ret;
 	ret = JE_ALIGN(ret, alignment);
 	offset = ret - head;
@@ -5417,7 +5454,13 @@ void JEMALLOC_NOTHROW *
 JEMALLOC_ATTR(malloc) JEMALLOC_ALLOC_SIZE2(1, 2)
 je_calloc(size_t num, size_t size) {
 	size_t total_size = num * size;
-	void *ret = _je_malloc(total_size + OBJ_HEADER_SIZE);
+	void *ret;
+	if (total_size < MAX_OFFSET) {
+		ret = _je_malloc(total_size + OBJ_HEADER_SIZE);
+	}
+	else {
+		ret = san_largealloc(total_size + OBJ_HEADER_SIZE);
+	}
 	if (ret) {
 		add_large_pointer(ret, total_size + OBJ_HEADER_SIZE);
 		remove_faulty_pages((size_t)ret);
@@ -5697,15 +5740,40 @@ JEMALLOC_ALLOC_SIZE(2)
 je_realloc(void *_ptr, size_t arg_size) {
 	void *ptr = UNMASK(_ptr);
 	struct obj_header *head = NULL;
+	size_t sz = 0;
 	if (ptr) {
-		head = (struct obj_header*)__je_san_get_base(ptr);
+		head = (struct obj_header*)(ptr - OBJ_HEADER_SIZE);
 		assert(head);
-		assert(is_valid_obj_header(head));
-		size_t sz = get_size_from_obj_header(head);
-		remove_large_pointer(head, sz);
+		if (!is_valid_obj_header(head)) {
+			head -= 1;
+			assert(is_valid_obj_header(head));
+		}
+		sz = head->size;
 		assert(ptr == (void*)(&head[1]));
 	}
-	void *newptr = _je_realloc(head, arg_size + OBJ_HEADER_SIZE);
+
+	void *newptr;
+	if (arg_size >= MAX_OFFSET && sz >= MAX_OFFSET) {
+		newptr = san_largerealloc(head, sz + OBJ_HEADER_SIZE, arg_size + OBJ_HEADER_SIZE);
+	}
+	else if (arg_size >= MAX_OFFSET || sz >= MAX_OFFSET) {
+		newptr = je_malloc(arg_size);
+		if (ptr) {
+			if (arg_size < sz) {
+				sz = arg_size;
+			}
+			memcpy(newptr, ptr, sz);
+			je_free(_ptr);
+		}
+		return newptr;
+	}
+	else {
+		if (sz) {
+			remove_large_pointer(head, sz + OBJ_HEADER_SIZE);
+		}
+		newptr = _je_realloc(head, arg_size + OBJ_HEADER_SIZE);
+ 	}
+	
 	add_large_pointer(newptr, arg_size + OBJ_HEADER_SIZE);
 	remove_faulty_pages((size_t)newptr);
 	return make_obj_header(newptr, arg_size, 0, 0);
@@ -5835,6 +5903,18 @@ je_free(void *_ptr) {
 	if (!is_valid_obj_header(head)) {
 		head -= 1;
 		assert(is_valid_obj_header(head));
+	}
+
+
+	if (head->size >= MAX_OFFSET) {
+		assert(ptr == (void*)((char*)(&head[1]) + head->offset) || ptr == (void*)(&head[2]));
+		if (head->aligned) {
+			Segment *S = ADDR_TO_SEGMENT((size_t)head);
+			assert(S->MagicString == LARGE_MAGIC);
+			head = (struct obj_header*)((size_t)head & S->AlignmentMask);
+		}
+		san_largefree(head, head->size + OBJ_HEADER_SIZE);
+		return;
 	}
 
 	if (head->aligned) {
