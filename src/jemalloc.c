@@ -72,45 +72,19 @@ struct LargeBase_t {
 	size_t base;
 };
 
-static /*__thread*/ struct LargeBase_t LargeBases[MAX_FAULTY_PAGES] = {0};
+//static /*__thread*/ struct LargeBase_t LargeBases[MAX_FAULTY_PAGES] = {0};
 
 static inline size_t base_key(size_t addr) {
 	return addr & FAULTY_MASK;
-}
-
-static size_t check_large_bases(size_t object)
-{
-	size_t key = base_key(object);
-	if (LargeBases[key].addr == object) {
-		return LargeBases[key].base;
-	}
-	return 0;
-}
-
-static inline void add_large_bases(size_t object, size_t base)
-{
-	object = (object >> 15);
-	size_t key = base_key(object);
-	LargeBases[key].addr = object;
-	LargeBases[key].base = base;
-}
-
-static void remove_large_base(size_t object) {
-	int i;
-	for (i = 0; i < MAX_FAULTY_PAGES; i++) {
-		if (LargeBases[i].base == object) {
-			LargeBases[i].base = 0;
-			LargeBases[i].addr = 0;
-		}
-	}
 }
 
 static int LastLine =  0;
 static char LastName[64];
 
 struct obj_header {
-	unsigned short magic;
-	unsigned short offset;
+	unsigned magic:16;
+	unsigned aligned:1;
+	unsigned offset:15;
 	unsigned size;
 };
 
@@ -172,11 +146,6 @@ static size_t get_interior_add(size_t ptr, size_t offset) {
 static inline void* get_fast_base_safe(size_t object, bool *large_offset) {
 	size_t offset = (object >> 49);
 	if (offset == MAX_OFFSET) {
-		size_t base = check_large_bases(object >> 15);
-		if (base) {
-			return (void*)base;
-		}
-		//malloc_printf("LARGE:%p\n", (void*)object);
 		*large_offset = true;
 		return NULL;
 	}
@@ -212,8 +181,7 @@ static inline void* get_fast_base_safe(size_t object, bool *large_offset) {
 static inline void* get_fast_base(size_t object) {
 	size_t offset = (object >> 49);
 	if (offset == MAX_OFFSET) {
-		size_t base = check_large_bases(object >> 15);
-		return (base) ? (void*)base : NULL;
+		return NULL;
 	}
 	struct obj_header *head = (struct obj_header*)((object & 0xFFFFFFFFFFFF) - offset - 8);
 	if (!is_valid_obj_header(head)) {
@@ -325,11 +293,13 @@ static void remove_large_pointer(void *ptr, size_t size) {
 
 #define IS_MAGIC(x) (((x) & 0xffff) == MAGIC_NUMBER)
 
-static void *make_obj_header(void *ptr, size_t size, unsigned short offset) {
+static void *make_obj_header(void *ptr, size_t size, unsigned short offset, bool aligned)
+{
 	assert(ptr);
 	struct obj_header *header = (struct obj_header*)ptr;
 	header->magic = MAGIC_NUMBER;
 	header->offset = offset;
+	header->aligned = aligned;
 	header->size = (unsigned)size;
 	return &header[1];
 }
@@ -3168,9 +3138,6 @@ static void* get_stack_ptr_base(void *ptr) {
 
 #define STACK_SIZE (8092 * 1024)
 
-struct obj_header fake_header = {MAGIC_NUMBER, 0, 0xfffffff};
-struct obj_header fake_global_header = {MAGIC_NUMBER, 0, 0xfffffff};
-
 static void *get_global_header1(unsigned *ptr) {
 	int iter = 0;
 	unsigned *base = ptr;
@@ -3267,32 +3234,16 @@ static void *_je_san_get_base(void *ptr) {
 	if (head->offset) {
 		head = (struct obj_header*)((char*)head + head->offset);
 	}
-	if (head->size >= MAX_OFFSET) {
-		add_large_bases((size_t)ptr, (size_t)head);
-	}
-	/*void *fbase = get_fast_base((size_t)ptr);
-	if (fbase) {
-		assert(head == fbase);
-	}*/
 	return head;
 }
 
 
-static void *_je_san_get_base3(void *ptr) {
-
-	size_t object = (size_t)ptr;
-	size_t offset = (object >> 49);
-	if (offset == MAX_OFFSET) {
-		size_t base = check_large_bases(object >> 15);
-		if (base) {
-			return (void*)base;
-		}
-	}
-
-
+static void *_je_san_get_base3(void *ptr)
+{
 	void *_ptr = UNMASK(ptr);
 	struct obj_header *head = (struct obj_header*)__je_san_get_base(_ptr);
 	assert(IS_MAGIC(head->magic));
+
 	if (head->offset) {
 		head = (struct obj_header*)((char*)head + head->offset);
 	}
@@ -3398,9 +3349,6 @@ static void *_je_san_get_base1(void *ptr) {
 		fprintf(trace_fp, "no-magic after offset :%p ptr:%p\n", head, ptr);
 		abort3("hi");
 	}
-	if (head->size >= MAX_OFFSET) {
-		add_large_bases((size_t)ptr, (size_t)head);
-	}
 	return head;
 }
 
@@ -3432,7 +3380,7 @@ je_malloc(size_t size) {
 		}
 	}
 	remove_faulty_pages((size_t)ret);
-	return make_obj_header(ret, size, 0);
+	return make_obj_header(ret, size, 0, 0);
 }
 
 JEMALLOC_EXPORT
@@ -5375,7 +5323,7 @@ je_aligned_alloc(size_t alignment, size_t _size) {
 	header->offset = offset;
 	ret -= OBJ_HEADER_SIZE;
 	remove_faulty_pages((size_t)ret);
-	ret = make_obj_header(ret, _size, 0);
+	ret = make_obj_header(ret, _size, 0, 1);
 
 	if (can_print_in_trace_fp()) {
 		static int reentry = 0;
@@ -5473,7 +5421,7 @@ je_calloc(size_t num, size_t size) {
 	if (ret) {
 		add_large_pointer(ret, total_size + OBJ_HEADER_SIZE);
 		remove_faulty_pages((size_t)ret);
-		ret = make_obj_header(ret, total_size, 0);
+		ret = make_obj_header(ret, total_size, 0, 0);
 		bzero(ret, total_size);
 	}
 	return ret;
@@ -5756,14 +5704,11 @@ je_realloc(void *_ptr, size_t arg_size) {
 		size_t sz = get_size_from_obj_header(head);
 		remove_large_pointer(head, sz);
 		assert(ptr == (void*)(&head[1]));
-		if (sz >= MAX_OFFSET) {
-			remove_large_base((size_t)head);
-		}
 	}
 	void *newptr = _je_realloc(head, arg_size + OBJ_HEADER_SIZE);
 	add_large_pointer(newptr, arg_size + OBJ_HEADER_SIZE);
 	remove_faulty_pages((size_t)newptr);
-	return make_obj_header(newptr, arg_size, 0);
+	return make_obj_header(newptr, arg_size, 0, 0);
 }
 
 JEMALLOC_NOINLINE
@@ -5886,17 +5831,18 @@ je_free(void *_ptr) {
 		}
 	}
 
-	struct obj_header *head = __je_san_get_base(ptr);
-	assert(head);
-	assert(is_valid_obj_header(head));
-	struct obj_header *objhead = (struct obj_header*)(((char*)head) + head->offset);
+	struct obj_header *head = (struct obj_header*)(ptr - OBJ_HEADER_SIZE);
+	if (!is_valid_obj_header(head)) {
+		head -= 1;
+		assert(is_valid_obj_header(head));
+	}
 
-	assert(ptr == (void*)((char*)(&head[1]) + head->offset) || ptr == (void*)(&head[2]));
+	if (head->aligned) {
+		head = __je_san_get_base(ptr);
+		assert(ptr == (void*)((char*)(&head[1]) + head->offset) || ptr == (void*)(&head[2]));
+	}
 	size_t size = get_size_from_obj_header(head);
 	remove_large_pointer(head, size);
-	if (objhead->size >= MAX_OFFSET) {
-		remove_large_base((size_t)objhead);
-	}
 	_je_free(head);
 }
 
