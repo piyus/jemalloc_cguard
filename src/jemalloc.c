@@ -3189,6 +3189,7 @@ static void *__je_san_get_base(void *ptr) {
 		return ret;
 	}
 	if (is_stack_ptr(ptr)) {
+		assert(0);
 		unsigned *ret = get_stack_ptr_base(ptr);
 		if (ret) {
 			return ret;
@@ -3253,11 +3254,12 @@ static void *_je_san_get_base(void *ptr) {
 	return head;
 }
 
+static void *__je_san_get_base1(void *ptr);
 
 static void *_je_san_get_base3(void *ptr)
 {
 	void *_ptr = UNMASK(ptr);
-	struct obj_header *head = (struct obj_header*)__je_san_get_base(_ptr);
+	struct obj_header *head = (struct obj_header*)__je_san_get_base1(_ptr);
 	assert(IS_MAGIC(head->magic));
 
 	if (head->offset) {
