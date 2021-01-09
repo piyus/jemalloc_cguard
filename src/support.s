@@ -10,7 +10,6 @@
 .globl fasan_check_size
 .extern san_page_fault_limit1
 .extern san_get_limit_check
-.extern san_base
 .extern abort
 
 # .comm name, size, alignment

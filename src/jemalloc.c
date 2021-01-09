@@ -3574,6 +3574,7 @@ void* je_san_page_fault_store(void *ptr, void *val, int line, char *name) {
 	return optr;
 }
 
+#if 0
 // change llvm before changing the name
 JEMALLOC_EXPORT
 void je_san_alloca(void *ptr1, size_t size, int line, char *name) {
@@ -3583,6 +3584,7 @@ void je_san_alloca(void *ptr1, size_t size, int line, char *name) {
 		malloc_printf("%lld alloca: ptr:%p sz:%zd %s():%d %d %d\n", event_id, ptr1, size, name, (line & 0xffff), (line>>16), line);
 	}
 }
+#endif
 
 JEMALLOC_EXPORT
 void je_san_call(void *ptr1, void *ptr2, int line, char *name) {
@@ -5323,6 +5325,9 @@ je_posix_memalign(void **memptr, size_t alignment, size_t _size) {
 }
 
 
+
+
+
 JEMALLOC_EXPORT JEMALLOC_ALLOCATOR JEMALLOC_RESTRICT_RETURN
 void JEMALLOC_NOTHROW *
 JEMALLOC_ATTR(malloc) JEMALLOC_ALLOC_SIZE(2)
@@ -5412,6 +5417,59 @@ je_aligned_alloc(size_t alignment, size_t _size) {
 	return ret;
 #endif
 }
+
+
+JEMALLOC_EXPORT
+void *
+je_san_alloca(size_t size, size_t alignment)
+{
+	void *ret = je_aligned_alloc(alignment, size);
+	//malloc_printf("dalloca: %p\n", ret);
+	return ret;
+}
+
+JEMALLOC_EXPORT
+void
+je_san_alloca_free(void *ptr)
+{
+	//malloc_printf("dfree: %p\n", ptr);
+	je_free(ptr);
+}
+
+#define MAX_DALLOCA 1024
+static __thread void* obj_arr[MAX_DALLOCA];
+static __thread int num_obj_arr = 0;
+
+
+JEMALLOC_EXPORT int
+je_san_dalloca_register()
+{
+	return num_obj_arr;
+}
+
+JEMALLOC_EXPORT
+void *
+je_san_dalloca(size_t size, size_t alignment)
+{
+	void *ret = je_aligned_alloc(alignment, size);
+	//malloc_printf("dalloca: %p\n", ret);
+	assert(num_obj_arr < MAX_DALLOCA);
+	obj_arr[num_obj_arr++] = ret;
+	return ret;
+}
+
+JEMALLOC_EXPORT
+void
+je_san_dalloca_deregister(int num_elem)
+{
+	int i;
+	for (i = num_elem; i < num_obj_arr; i++) {
+		//malloc_printf("dfreea: %p\n", obj_arr[i]);
+		je_free(obj_arr[i]);
+	}
+	num_obj_arr = num_elem;
+}
+
 
 #if 0
 static JEMALLOC_ALLOCATOR JEMALLOC_RESTRICT_RETURN
