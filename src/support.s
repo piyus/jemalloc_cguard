@@ -72,6 +72,68 @@ fasan_limit_check:
 
 5:
 
+	push %rdi
+	push %rcx
+
+	shl $15, %rdi
+	shr $15, %rdi
+
+	movq GlobalCache, %rax
+	cmp %rdi, %rax
+	ja 10f
+	movl -4(%rax), %ecx
+	add %rax, %rcx
+	cmp %rdi, %rcx
+	jbe 10f
+
+	pop %rcx
+	pop %rdi
+	ret
+10:
+	movq GlobalCache+8, %rax
+	cmp %rdi, %rax
+	ja 10f
+	movl -4(%rax), %ecx
+	add %rax, %rcx
+	cmp %rdi, %rcx
+	jbe 10f
+
+	pop %rcx
+	pop %rdi
+	ret
+
+10:
+	movq GlobalCache+16, %rax
+	cmp %rdi, %rax
+	ja 10f
+	movl -4(%rax), %ecx
+	add %rax, %rcx
+	cmp %rdi, %rcx
+	jbe 10f
+
+	pop %rcx
+	pop %rdi
+	ret
+
+10:
+	movq GlobalCache+24, %rax
+	cmp %rdi, %rax
+	ja 10f
+	movl -4(%rax), %ecx
+	add %rax, %rcx
+	cmp %rdi, %rcx
+	jbe 10f
+
+	pop %rcx
+	pop %rdi
+	ret
+
+
+10:
+	pop %rcx
+	pop %rdi
+
+
 	push %rcx
 	push %rdx
 	push %rsi
@@ -389,6 +451,68 @@ fasan_limit:
 	ret
 
 5:
+	push %rdi
+	push %rcx
+
+	shl $15, %rdi
+	shr $15, %rdi
+
+	movq GlobalCache, %rax
+	cmp %rdi, %rax
+	ja 10f
+	movl -4(%rax), %ecx
+	add %rax, %rcx
+	cmp %rdi, %rcx
+	jbe 10f
+
+	pop %rcx
+	pop %rdi
+	ret
+10:
+	movq GlobalCache+8, %rax
+	cmp %rdi, %rax
+	ja 10f
+	movl -4(%rax), %ecx
+	add %rax, %rcx
+	cmp %rdi, %rcx
+	jbe 10f
+
+	pop %rcx
+	pop %rdi
+	ret
+
+10:
+	movq GlobalCache+16, %rax
+	cmp %rdi, %rax
+	ja 10f
+	movl -4(%rax), %ecx
+	add %rax, %rcx
+	cmp %rdi, %rcx
+	jbe 10f
+
+	pop %rcx
+	pop %rdi
+	ret
+
+10:
+	movq GlobalCache+24, %rax
+	cmp %rdi, %rax
+	ja 10f
+	movl -4(%rax), %ecx
+	add %rax, %rcx
+	cmp %rdi, %rcx
+	jbe 10f
+
+	pop %rcx
+	pop %rdi
+	ret
+
+
+10:
+	pop %rcx
+	pop %rdi
+
+
 	
 
 	push %rcx

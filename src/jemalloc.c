@@ -2797,8 +2797,20 @@ static void initialize_globals(struct obj_header *start, struct obj_header *end)
 	}
 }
 
+#define GLOBAL_CACHE_SIZE 4
 extern void *MinGlobalAddr;
 extern void *MaxGlobalAddr;
+extern void *GlobalCache[GLOBAL_CACHE_SIZE];
+static struct obj_header CacheObj = {MAGIC_NUMBER, 0, 0, 0};
+
+static void addToGlobalCache(void *ptr) {
+	int i;
+	for (i = GLOBAL_CACHE_SIZE-1; i > 0; i--) {
+		GlobalCache[i] = GlobalCache[i-1];
+	}
+	GlobalCache[0] = ptr;
+	malloc_printf("adding global cache: %p\n", ptr);
+}
 
 static void
 initialize_sections()
@@ -2808,6 +2820,10 @@ initialize_sections()
 
 	MinGlobalAddr = (void*)0xFFFFFFFFFFFFULL;
 	MaxGlobalAddr = NULL;
+	int i;
+	for (i = 0; i < GLOBAL_CACHE_SIZE; i++) {
+		GlobalCache[i] = ((&CacheObj) + 1);
+	}
 	__text_start = NULL;
 	__text_end = NULL;
 
@@ -2840,7 +2856,6 @@ initialize_sections()
 		goto out;
 	}
 
-	int i;
 	Elf64_Shdr *Shdr = (Elf64_Shdr*)(Base + Header->e_shoff);
 	char *Strtab = Base + Shdr[Header->e_shstrndx].sh_offset;
 
@@ -3791,6 +3806,16 @@ void* je_san_interior_must_check(void *_base, void *_ptr, size_t ptrsize, size_t
 		}
 		return _MASK1(ptr);
 	}
+
+	malloc_printf("_base:%p\n", base);
+	size_t offset = ((size_t)_base >> 49);
+	if (offset == MAX_OFFSET && base > MinLargeAddr) {
+		unsigned *head = (unsigned*)san_largeheader(base);
+		malloc_printf("Head:%p\n", head);
+		assert(IS_MAGIC(head[0]));
+		return head + 2;
+	}
+
 	unsigned *head = _je_san_get_base3(_base);
 	if (head == NULL) {
 		if (can_print_in_trace_fp()) {
@@ -3887,7 +3912,9 @@ void* je_san_page_fault_limit(void *ptr, int line, char *name) {
 
 JEMALLOC_EXPORT
 void* je_san_page_fault_limit1(void *ptr) {
-	return _je_san_get_base(ptr) + 8;
+	void *ret = _je_san_get_base(ptr) + 8;
+	addToGlobalCache(ret);
+	return ret;
 }
 
 JEMALLOC_EXPORT
@@ -3911,6 +3938,7 @@ void* je_san_get_limit_check(void *_base) {
 		abort3("hi");
 	}
 	assert(IS_MAGIC(head[0]));
+	addToGlobalCache(head+2);
 
 	return head + 2;
 #if 0
@@ -3926,11 +3954,19 @@ void* je_san_get_limit_check(void *_base) {
 JEMALLOC_EXPORT
 void* je_san_get_limit_must_check(void *_base) {
 	void *base = UNMASK(_base);
-	//size_t offset = ((size_t)_base & (0xFFFFULL << 48));
 
 	if (base < MinGlobalAddr || is_invalid_ptr((size_t)_base)) {
 		//fprintf(trace_fp, "base11:%p _limit:%p\n", _base, (void*)offset);
 		return NULL; //(void*)offset;
+	}
+
+	malloc_printf("_base:%p\n", base);
+	size_t offset = ((size_t)_base >> 49);
+	if (offset == MAX_OFFSET && base > MinLargeAddr) {
+		unsigned *head = (unsigned*)san_largeheader(base);
+		malloc_printf("Head:%p\n", head);
+		assert(IS_MAGIC(head[0]));
+		return head + 2;
 	}
 
 	unsigned *head = _je_san_get_base3(_base);
