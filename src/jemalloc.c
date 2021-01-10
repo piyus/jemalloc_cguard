@@ -2778,7 +2778,9 @@ static void add_global_object(struct obj_header *obj) {
 		global_objects = new_map;
 	}
 	global_objects[num_global_variables++] = obj;
-	//malloc_printf("adding:%p %d %x\n", obj, obj->size, obj->magic);
+	//if (obj->size >= MAX_OFFSET) {
+		//malloc_printf("adding:%p %d %x\n", obj, obj->size, obj->magic);
+	//}
 }
 
 static void initialize_globals(struct obj_header *start, struct obj_header *end) {
@@ -2796,6 +2798,7 @@ static void initialize_globals(struct obj_header *start, struct obj_header *end)
 }
 
 extern void *MinGlobalAddr;
+extern void *MaxGlobalAddr;
 
 static void
 initialize_sections()
@@ -2804,6 +2807,7 @@ initialize_sections()
 	ssize_t Count = readlink( "/proc/self/exe", Exec, PATH_SZ);
 
 	MinGlobalAddr = (void*)0xFFFFFFFFFFFFULL;
+	MaxGlobalAddr = NULL;
 	__text_start = NULL;
 	__text_end = NULL;
 
@@ -2851,6 +2855,9 @@ initialize_sections()
 			if (start) {
 				if ((void*)start < MinGlobalAddr) {
 					MinGlobalAddr = start;
+				}
+				if ((void*)end > MaxGlobalAddr) {
+					MaxGlobalAddr = end;
 				}
 				initialize_globals(start, end);
 			}
@@ -4930,6 +4937,7 @@ void install_handler() {
 JEMALLOC_EXPORT
 void* je_san_copy_argv(int argc, char **argv) {
 	enable_masking = 1;
+	MinLargeAddr = (void*)MAX_ULONG;
 	install_handler();
 	set_trace_fp();
 	initialize_sections();

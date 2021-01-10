@@ -16,7 +16,7 @@
 typedef unsigned long long ulong64;
 
 
-#define SEGMENT_SIZE (4ULL << 32)
+#define SEGMENT_SIZE (1ULL << 32)
 #define PAGE_SIZE 4096
 #define Align(x, y) (((x) + (y-1)) & ~(y-1))
 #define ADDR_TO_PAGE(x) (char*)(((ulong64)(x)) & ~(PAGE_SIZE-1))
@@ -25,7 +25,7 @@ typedef unsigned long long ulong64;
 #define LARGE_MAGIC 0xdeadfacedeaddeed
 #define MAX_CACHE_SIZE (1ULL << 20)
 #define MAX_CACHE_ENTRIES 32
-void *MinLargeAddr = (void*)MAX_ULONG;
+extern void *MinLargeAddr;
 
 static void *san_largerealloc(void *Ptr, size_t OldSize, size_t NewSize);
 

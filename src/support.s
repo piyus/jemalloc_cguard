@@ -15,8 +15,11 @@
 # .comm name, size, alignment
 
 .comm MinGlobalAddr, 8, 8
+.comm MaxGlobalAddr, 8, 8
+.comm MinLargeAddr, 8, 8
 .comm __text_start, 8, 8
 .comm __text_end, 8, 8
+.comm GlobalCache, 32, 8
 
 #ARGS: rdi, rsi, rdx, rcx, r8, r9
 #CALLEE-SAVED: RBX, R12-R15, RBP
@@ -47,7 +50,27 @@ fasan_limit_check:
 	shr $49, %rax
 	cmp $0x7FFF, %rax
 	jl 1f
-	
+
+	movabs $0xFFFF00000000ULL, %rax
+	and %rdi, %rax
+
+	cmp MaxGlobalAddr, %rax
+	jbe 5f
+
+	push %rcx
+	movq 8(%rax), %rcx
+	cmp $0xdeaddeed, %ecx
+	jne 2f
+	and (%rax), %rdi
+	add $8, %rdi
+	mov %rdi, %rax
+	movw -8(%rax), %di
+	cmp $0xface, %di
+	jne 2f
+	pop %rcx
+	ret
+
+5:
 
 	push %rcx
 	push %rdx
@@ -345,6 +368,27 @@ fasan_limit:
 	shr $49, %rax
 	cmp $0x7FFF, %rax
 	jl 1f
+
+	movabs $0xFFFF00000000ULL, %rax
+	and %rdi, %rax
+
+	cmp MaxGlobalAddr, %rax
+	jbe 5f
+
+	push %rcx
+	movq 8(%rax), %rcx
+	cmp $0xdeaddeed, %ecx
+	jne 2f
+	and (%rax), %rdi
+	add $8, %rdi
+	mov %rdi, %rax
+	movw -8(%rax), %di
+	cmp $0xface, %di
+	jne 2f
+	pop %rcx
+	ret
+
+5:
 	
 
 	push %rcx
