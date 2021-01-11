@@ -3798,6 +3798,7 @@ void* je_san_check_size(void *_ptr, size_t ptrsize) {
 
 JEMALLOC_EXPORT
 void* je_san_interior_must_check(void *_base, void *_ptr, size_t ptrsize, size_t ID) {
+	assert(0);
 	void *ptr = UNMASK(_ptr);
 	void *base = UNMASK(_base);
 	if (ptr == NULL || base == NULL) {
@@ -3807,11 +3808,11 @@ void* je_san_interior_must_check(void *_base, void *_ptr, size_t ptrsize, size_t
 		return _MASK1(ptr);
 	}
 
-	malloc_printf("_base:%p\n", base);
+	//malloc_printf("_base:%p\n", base);
 	size_t offset = ((size_t)_base >> 49);
 	if (offset == MAX_OFFSET && base > MinLargeAddr) {
 		unsigned *head = (unsigned*)san_largeheader(base);
-		malloc_printf("Head:%p\n", head);
+		//malloc_printf("Head:%p\n", head);
 		assert(IS_MAGIC(head[0]));
 		return head + 2;
 	}
@@ -3960,11 +3961,11 @@ void* je_san_get_limit_must_check(void *_base) {
 		return NULL; //(void*)offset;
 	}
 
-	malloc_printf("_base:%p\n", base);
+	//malloc_printf("_base:%p\n", base);
 	size_t offset = ((size_t)_base >> 49);
 	if (offset == MAX_OFFSET && base > MinLargeAddr) {
 		unsigned *head = (unsigned*)san_largeheader(base);
-		malloc_printf("Head:%p\n", head);
+		//malloc_printf("Head:%p\n", head);
 		assert(IS_MAGIC(head[0]));
 		return head + 2;
 	}
