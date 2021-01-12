@@ -20,6 +20,7 @@
 .comm __text_start, 8, 8
 .comm __text_end, 8, 8
 .comm GlobalCache, 32, 8
+.comm LastCrashAddr, 8, 8
 
 #ARGS: rdi, rsi, rdx, rcx, r8, r9
 #CALLEE-SAVED: RBX, R12-R15, RBP
@@ -169,6 +170,8 @@ fasan_limit_check:
 	shr $16, %rax
 
 	xor %rdi, %rdi
+	cmp %rax, LastCrashAddr
+	je 3f
 	movw -8(%rax), %di
 	jmp 4f
 	nop
@@ -180,7 +183,7 @@ fasan_limit_check:
 	nop
 4:
 	cmp $0xface, %di
-	jne 3f
+	jne 5f
 
 	ret
 
@@ -198,6 +201,11 @@ fasan_limit_check:
 	ret
 
 3:
+	xor %rax, %rax
+	ret
+
+5:
+	mov %rax, LastCrashAddr
 	xor %rax, %rax
 	ret
 	

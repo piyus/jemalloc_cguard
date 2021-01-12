@@ -35,6 +35,9 @@ static unsigned long long min_events = 0xffff4800000000ULL;
 static int trace_count = 0;
 static /*__thread*/ bool signal_handler_invoked = false;
 extern void *__text_start, *__text_end;
+extern void *MinGlobalAddr;
+extern void *MaxGlobalAddr;
+extern void *LastCrashAddr;
 
 #define MAX_FAULTY_PAGES 4096
 #define PAGE_SHIFT 12
@@ -268,6 +271,9 @@ static bool need_tracking(unsigned long long val) {
 }
 
 static void add_large_pointer(void *ptr, size_t size) {
+	if (LastCrashAddr >= ptr && LastCrashAddr < ptr + size) {
+		LastCrashAddr = NULL;
+	}
 	if (size > SC_SMALL_MAXCLASS && size < MAX_OFFSET) {
 		tsd_t *tsd = tsd_fetch_min();
 		tsdn_t *tsdn = tsd_tsdn(tsd);
@@ -278,6 +284,55 @@ static void add_large_pointer(void *ptr, size_t size) {
 		szind_t szind = extent_szind_get_maybe_invalid(e);
 		extent_interior_register1(tsdn, rtree_ctx, e, szind);
 	}
+}
+
+#define MAX_SAN_HASH_SIZE 4096
+//static unsigned* SanHash[4096] = {NULL};
+//static int NumSanHashElem = 0;
+
+static void remove_from_san_hash(void *obj)
+{
+#if 0
+	if (!NumSanHashElem) {
+		//return;
+	}
+	int i;
+	for (i = 0; i < MAX_SAN_HASH_SIZE; i++) {
+		if (SanHash[i] == (unsigned*)obj) {
+			SanHash[i] = NULL;
+			if (obj >= MaxGlobalAddr) {
+				NumSanHashElem--;
+			}
+		}
+	}
+#endif
+}
+
+#if 0
+static void add_to_san_hash(unsigned *header, int Idx)
+{
+	if (!SanHash[Idx] && (void*)header >= MaxGlobalAddr) {
+		NumSanHashElem++;
+	}
+	SanHash[Idx] = header;
+}
+#endif
+
+static int san_hash_index(size_t obj)
+{
+	//return (obj >> 3) & (MAX_SAN_HASH_SIZE-1);
+	return 0;
+}
+
+static void* lookup_san_hash(void *base, int Idx)
+{
+#if 0
+	unsigned *hashval = SanHash[Idx];
+	if (hashval && (unsigned*)base >= hashval && (char*)base < ((char*)hashval) + *(hashval-1)) {
+		return hashval;
+	}
+#endif
+	return NULL;
 }
 
 static void remove_large_pointer(void *ptr, size_t size) {
@@ -2798,8 +2853,6 @@ static void initialize_globals(struct obj_header *start, struct obj_header *end)
 }
 
 #define GLOBAL_CACHE_SIZE 4
-extern void *MinGlobalAddr;
-extern void *MaxGlobalAddr;
 extern void *GlobalCache[GLOBAL_CACHE_SIZE];
 static struct obj_header CacheObj = {MAGIC_NUMBER, 0, 0, 0};
 
@@ -2820,6 +2873,7 @@ initialize_sections()
 
 	MinGlobalAddr = (void*)0xFFFFFFFFFFFFULL;
 	MaxGlobalAddr = NULL;
+	LastCrashAddr= NULL;
 	int i;
 	for (i = 0; i < GLOBAL_CACHE_SIZE; i++) {
 		GlobalCache[i] = ((&CacheObj) + 1);
@@ -3952,6 +4006,7 @@ void* je_san_get_limit_check(void *_base) {
 #endif
 }
 
+
 JEMALLOC_EXPORT
 void* je_san_get_limit_must_check(void *_base) {
 	void *base = UNMASK(_base);
@@ -3959,6 +4014,11 @@ void* je_san_get_limit_must_check(void *_base) {
 	if (base < MinGlobalAddr || is_invalid_ptr((size_t)_base)) {
 		//fprintf(trace_fp, "base11:%p _limit:%p\n", _base, (void*)offset);
 		return NULL; //(void*)offset;
+	}
+	size_t Idx = san_hash_index((size_t)_base);
+	unsigned *hashval = lookup_san_hash(base, Idx);
+	if (hashval) {
+		return hashval;
 	}
 
 	//malloc_printf("_base:%p\n", base);
@@ -3981,6 +4041,9 @@ void* je_san_get_limit_must_check(void *_base) {
 		abort3("hi");
 	}
 	assert(IS_MAGIC(head[0]));
+	//if (!is_stack_ptr(base)) {
+		//add_to_san_hash(head+2, Idx);
+	//}
 
 	return head + 2;
 #if 0
@@ -5855,6 +5918,7 @@ je_realloc(void *_ptr, size_t arg_size) {
 		}
 		sz = head->size;
 		assert(ptr == (void*)(&head[1]));
+		remove_from_san_hash(&head[1]);
 	}
 
 	void *newptr;
@@ -6010,6 +6074,7 @@ je_free(void *_ptr) {
 		assert(is_valid_obj_header(head));
 	}
 
+	remove_from_san_hash(&head[1]);
 
 	if (head->size >= MAX_OFFSET) {
 		assert(ptr == (void*)((char*)(&head[1]) + head->offset) || ptr == (void*)(&head[2]));
