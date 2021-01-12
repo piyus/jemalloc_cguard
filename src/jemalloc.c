@@ -3208,6 +3208,7 @@ static void* get_stack_ptr_base(void *ptr) {
 			}
 		}
 	}
+	assert(0);
 	//print_stack(ptr);
 	return NULL;
 }
