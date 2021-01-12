@@ -45,6 +45,7 @@ extern void *LastCrashAddr;
 #define FAULTY_MASK ((1ULL<<FAULTY_BITS) - 1)
 #define MAX_OFFSET ((1ULL<<15) - 1)
 
+#if 0
 
 static size_t FaultyPages[MAX_FAULTY_PAGES] = {0};
 
@@ -71,6 +72,7 @@ static void remove_faulty_pages(size_t object)
 		FaultyPages[key] = 0;
 	}
 }
+#endif
 
 struct LargeBase_t {
 	size_t addr;
@@ -156,10 +158,10 @@ static inline void* get_fast_base_safe(size_t object, bool *large_offset) {
 	}
 	struct obj_header *head = (struct obj_header*)((object & 0xFFFFFFFFFFFF) - offset - 8);
 
-	if (check_faulty_pages((size_t)head)) {
+	//if (check_faulty_pages((size_t)head)) {
 		//malloc_printf("FAULTY: %p\n", head);
-		return NULL;
-	}
+		//return NULL;
+	//}
 
 	int magic_number = 0;
 	asm volatile ("movl (%1), %0 \n\t"
@@ -168,7 +170,7 @@ static inline void* get_fast_base_safe(size_t object, bool *large_offset) {
 								"=r" (magic_number) : "r"(head));
 
 	if (signal_handler_invoked) {
-		add_faulty_pages((size_t)head);
+		//add_faulty_pages((size_t)head);
 		signal_handler_invoked = false;
 		return NULL;
 	}
@@ -3481,7 +3483,7 @@ je_malloc(size_t size) {
 			reentry = 0;
 		}
 	}
-	remove_faulty_pages((size_t)ret);
+	//remove_faulty_pages((size_t)ret);
 	return make_obj_header(ret, size, 0, 0);
 }
 
@@ -5475,7 +5477,7 @@ je_aligned_alloc(size_t alignment, size_t _size) {
 	assert(offset >= OBJ_HEADER_SIZE);
 	header->offset = offset;
 	ret -= OBJ_HEADER_SIZE;
-	remove_faulty_pages((size_t)ret);
+	//remove_faulty_pages((size_t)ret);
 	ret = make_obj_header(ret, _size, 0, 1);
 
 	if (can_print_in_trace_fp()) {
@@ -5632,7 +5634,7 @@ je_calloc(size_t num, size_t size) {
 	}
 	if (ret) {
 		add_large_pointer(ret, total_size + OBJ_HEADER_SIZE);
-		remove_faulty_pages((size_t)ret);
+		//remove_faulty_pages((size_t)ret);
 		ret = make_obj_header(ret, total_size, 0, 0);
 		bzero(ret, total_size);
 	}
@@ -5945,7 +5947,7 @@ je_realloc(void *_ptr, size_t arg_size) {
  	}
 	
 	add_large_pointer(newptr, arg_size + OBJ_HEADER_SIZE);
-	remove_faulty_pages((size_t)newptr);
+	//remove_faulty_pages((size_t)newptr);
 	return make_obj_header(newptr, arg_size, 0, 0);
 }
 
