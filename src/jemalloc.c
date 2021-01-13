@@ -2864,7 +2864,6 @@ static void addToGlobalCache(void *ptr) {
 		GlobalCache[i] = GlobalCache[i-1];
 	}
 	GlobalCache[0] = ptr;
-	malloc_printf("adding global cache: %p\n", ptr);
 }
 
 static void
@@ -6097,11 +6096,12 @@ je_free(void *_ptr) {
 	}
 
 	if (head->aligned) {
-		//head = __je_san_get_base(ptr);
+		struct obj_header *head1 = __je_san_get_base(ptr);
 		head = head - 1;
 		if (head->magic == 0) {
 			head = (struct obj_header*)(((char*)head) - head->offset);
 		}
+		assert(head == head1);
 		assert(is_valid_obj_header(head));
 		assert(ptr == (void*)((char*)(&head[1]) + head->offset) || ptr == (void*)(&head[2]));
 	}
