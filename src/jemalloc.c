@@ -37,7 +37,8 @@ static /*__thread*/ bool signal_handler_invoked = false;
 extern void *__text_start, *__text_end;
 extern void *MinGlobalAddr;
 extern void *MaxGlobalAddr;
-extern void *LastCrashAddr;
+extern void *LastCrashAddr1;
+extern void *LastCrashAddr2;
 
 #define MAX_FAULTY_PAGES 4096
 #define PAGE_SHIFT 12
@@ -273,8 +274,11 @@ static bool need_tracking(unsigned long long val) {
 }
 
 static void add_large_pointer(void *ptr, size_t size) {
-	if (LastCrashAddr >= ptr && LastCrashAddr < ptr + size) {
-		LastCrashAddr = NULL;
+	if (LastCrashAddr1 >= ptr && LastCrashAddr1 < ptr + size) {
+		LastCrashAddr1 = NULL;
+	}
+	if (LastCrashAddr2 >= ptr && LastCrashAddr2 < ptr + size) {
+		LastCrashAddr2 = NULL;
 	}
 	if (size > SC_SMALL_MAXCLASS && size < MAX_OFFSET) {
 		tsd_t *tsd = tsd_fetch_min();
@@ -2874,7 +2878,8 @@ initialize_sections()
 
 	MinGlobalAddr = (void*)0xFFFFFFFFFFFFULL;
 	MaxGlobalAddr = NULL;
-	LastCrashAddr= NULL;
+	LastCrashAddr1 = NULL;
+	LastCrashAddr2 = NULL;
 	int i;
 	for (i = 0; i < GLOBAL_CACHE_SIZE; i++) {
 		GlobalCache[i] = ((&CacheObj) + 1);
@@ -5020,9 +5025,11 @@ void je_san_enable_mask() {
 #include <ucontext.h>
 
 
+
 void posix_signal_handler(int sig, siginfo_t *siginfo, void *arg) {
 	ucontext_t *context = (ucontext_t *)arg;
-  fprintf(trace_fp, "Address from where crash happen is %llx \n",context->uc_mcontext.gregs[REG_RIP]);
+	//void *addr = siginfo->si_addr;
+  //fprintf(trace_fp, "Address from where crash happen is %llx %p %zx\n",context->uc_mcontext.gregs[REG_RIP], addr, (size_t)addr);
 	context->uc_mcontext.gregs[REG_RIP] = context->uc_mcontext.gregs[REG_RIP] + 8;
 	signal_handler_invoked = true;
 }
