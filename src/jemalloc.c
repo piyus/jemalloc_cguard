@@ -5474,6 +5474,12 @@ je_aligned_alloc(size_t alignment, size_t _size) {
 		header->size = _size;
 		return ret;
 	}
+	if (offset > OBJ_HEADER_SIZE) {
+		assert(offset >= OBJ_HEADER_SIZE * 2);
+		struct obj_header *head2 = ((struct obj_header*)ret) - 2;
+		head2->offset = offset - OBJ_HEADER_SIZE;
+		head2->magic = 0;
+	}
 	assert(offset >= OBJ_HEADER_SIZE);
 	header->offset = offset;
 	ret -= OBJ_HEADER_SIZE;
@@ -6091,7 +6097,12 @@ je_free(void *_ptr) {
 	}
 
 	if (head->aligned) {
-		head = __je_san_get_base(ptr);
+		//head = __je_san_get_base(ptr);
+		head = head - 1;
+		if (head->magic == 0) {
+			head = (struct obj_header*)(((char*)head) - head->offset);
+		}
+		assert(is_valid_obj_header(head));
 		assert(ptr == (void*)((char*)(&head[1]) + head->offset) || ptr == (void*)(&head[2]));
 	}
 	size_t size = get_size_from_obj_header(head);
