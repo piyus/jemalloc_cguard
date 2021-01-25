@@ -4457,9 +4457,13 @@ int je_asprintf (char **string_ptr, const char *format, ...)
 {
   va_list arg;
   int done;
+	*string_ptr = NULL;
   va_start (arg, format);
   done = je_vasprintf(string_ptr, format, arg);
   va_end (arg);
+
+	struct obj_header *head = (struct obj_header*)(*string_ptr - OBJ_HEADER_SIZE);
+	assert(is_valid_obj_header(head));
   return done;
 }
 
@@ -6086,6 +6090,10 @@ je_free(void *_ptr) {
 	struct obj_header *head = (struct obj_header*)(ptr - OBJ_HEADER_SIZE);
 	if (!is_valid_obj_header(head)) {
 		head -= 1;
+		/*if (!is_valid_obj_header(head)) {
+			malloc_printf("ptr:%p _ptr:%p\n", ptr, _ptr);
+			abort();
+		}*/
 		assert(is_valid_obj_header(head));
 	}
 
@@ -6103,12 +6111,12 @@ je_free(void *_ptr) {
 	}
 
 	if (head->aligned) {
-		struct obj_header *head1 = __je_san_get_base(ptr);
+		//struct obj_header *head1 = __je_san_get_base(ptr);
 		head = head - 1;
 		if (head->magic == 0) {
 			head = (struct obj_header*)(((char*)head) - head->offset);
 		}
-		assert(head == head1);
+		//assert(head == head1);
 		assert(is_valid_obj_header(head));
 		assert(ptr == (void*)((char*)(&head[1]) + head->offset) || ptr == (void*)(&head[2]));
 	}
