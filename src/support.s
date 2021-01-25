@@ -613,7 +613,6 @@ fasan_limit:
 	ret
 
 5:
-	push %rdi
 	push %rcx
 
 	shl $15, %rdi
@@ -628,7 +627,6 @@ fasan_limit:
 	jbe 10f
 
 	pop %rcx
-	pop %rdi
 	ret
 10:
 	movq GlobalCache+8, %rax
@@ -640,7 +638,6 @@ fasan_limit:
 	jbe 10f
 
 	pop %rcx
-	pop %rdi
 	ret
 
 10:
@@ -653,7 +650,6 @@ fasan_limit:
 	jbe 10f
 
 	pop %rcx
-	pop %rdi
 	ret
 
 10:
@@ -666,18 +662,14 @@ fasan_limit:
 	jbe 10f
 
 	pop %rcx
-	pop %rdi
 	ret
 
 
 10:
-	pop %rcx
-	pop %rdi
+	mov $0xFFFE, %rax
+	shl $48, %rax
+	or %rax, %rdi
 
-
-	
-
-	push %rcx
 	push %rdx
 	push %rsi
 	push %r8
