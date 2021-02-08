@@ -4167,6 +4167,36 @@ static void *get_func_addr(const char *name, void *wrapper) {
 }
 
 JEMALLOC_EXPORT
+char *je_setlocale(int category, const char *locale) {
+	static char *ret[32] = {NULL};
+	assert(category < 32);
+
+	static char* (*fptr)(int, const char*) = NULL;
+	if (fptr == NULL) {
+		fptr = get_func_addr("setlocale", je_setlocale);
+		assert(fptr);
+	}
+	char *ret1 = fptr(category, locale);
+	if (ret1) {
+		size_t len = strlen(ret1);
+		if (ret[category]) {
+			if (len > 15) {
+				je_free(ret[category]);
+				ret[category] = je_malloc(len+1);
+			}
+		}
+		else {
+			size_t size = (len <= 15) ? 16 : len+1;
+			ret[category] = je_malloc(size);
+		}
+		memcpy(ret[category], ret1, len);
+		ret1 = ret[category];
+		ret1[len] = '\0';
+	}
+	return ret1;
+}
+
+JEMALLOC_EXPORT
 struct tm *je_localtime(const time_t *timep) {
 	static struct tm* ret = NULL;
 	if (ret == NULL) {

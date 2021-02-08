@@ -391,23 +391,13 @@ fasan_check_size:
 	ret
 
 fasan_bounds:
-	int3
+#	int3
 
 	cmp %rdx, %rcx
 	jb 3f
 
 	cmp %rdi, %rsi
 	jb 3f
-
-	shr $48, %rsi
-	jne 2f
-
-	shr $48, %rcx
-	jne 2f
-
-	shr $48, %rdx
-	jne 2f
-
 
 	movw -8(%rdi), %si
 	cmp $0xface, %si
@@ -415,14 +405,13 @@ fasan_bounds:
 
 	ret
 3:
-	call abort
-	ret
+	int3
 2:
 	int3
 	ret
 
 fasan_bounds1:
-	int3
+#	int3
 
 	cmp %rdx, %rcx
 	jb 3f
@@ -430,22 +419,9 @@ fasan_bounds1:
 	cmp %rdi, %rsi
 	jb 3f
 
-	shr $48, %rsi
-	jne 2f
-
-	shr $48, %rdx
-	jne 2f
-
-	shr $48, %rdi
-	jne 2f
-
-	shr $48, %rcx
-	jne 2f
-
 	ret
 3:
-	call abort
-	ret
+	int3
 2:
 	int3
 	ret
