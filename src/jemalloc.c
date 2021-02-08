@@ -4197,6 +4197,29 @@ char *je_setlocale(int category, const char *locale) {
 }
 
 JEMALLOC_EXPORT
+char *je_strerror(int errnum)
+{
+	static char *ret[128] = {NULL};
+	assert(errnum < 128);
+	if (ret[errnum] != NULL) {
+		return ret[errnum];
+	}
+
+	static char* (*fptr)(int) = NULL;
+	if (fptr == NULL) {
+		fptr = get_func_addr("strerror", je_strerror);
+		assert(fptr);
+	}
+	char *ret1 = fptr(errnum);
+	size_t len = strlen(ret1);
+	char *ret2 = je_malloc(len+1);
+	ret[errnum] = ret2;
+	memcpy(ret2, ret1, len);
+	ret2[len] = '\0';
+	return ret2;
+}
+
+JEMALLOC_EXPORT
 struct tm *je_localtime(const time_t *timep) {
 	static struct tm* ret = NULL;
 	if (ret == NULL) {
