@@ -4488,6 +4488,44 @@ int je_vsprintf(char *str, const char *format, va_list ap) {
   return ret;
 }
 
+JEMALLOC_EXPORT
+char *je_getenv(const char *name)
+{
+	static char *Cache1[64] = {NULL};
+	static char *Cache2[64] = {NULL};
+	static char* (*fptr)(const char*) = NULL;
+	if (fptr == NULL) {
+		fptr = get_func_addr("getenv", je_getenv);
+	}
+	char *Ret = fptr(name);
+	if (Ret == NULL) {
+		return NULL;
+	}
+
+	int i;
+	int Len = strlen(Ret);
+	char *Ret1 = je_malloc(Len+1);
+	memcpy(Ret1, Ret, Len);
+	Ret1[Len] = '\0';
+
+	for (i = 0; i < 63; i++) {
+		if (Cache1[i] == Ret) {
+			je_free(Cache2[i]);
+			Cache2[i] = Ret1;
+			return Ret1;
+		}
+		else if (Cache1[i] == NULL) {
+			Cache1[i] = Ret;
+			Cache2[i] = Ret1;
+			return Ret1;
+		}
+	}
+
+	Cache1[i] = Ret;
+	Cache2[i] = Ret1;
+	return Ret1;
+}
+
 
 JEMALLOC_EXPORT
 int je_vasprintf(char **strp, const char *fmt, va_list ap)
