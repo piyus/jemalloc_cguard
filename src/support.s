@@ -406,6 +406,7 @@ fasan_bounds:
 	ret
 3:
 	int3
+	ret
 2:
 	int3
 	ret
@@ -422,6 +423,7 @@ fasan_bounds1:
 	ret
 3:
 	int3
+	ret
 2:
 	int3
 	ret
