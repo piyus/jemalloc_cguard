@@ -3368,6 +3368,7 @@ void* je_san_interior(void *_base, void *_ptr, size_t ID) {
 	}
 	char *interior2 = (char*)get_interior_add((size_t)_ptr, (size_t)(_ptr-_base));
 
+#if 0
 	void *ptr = UNMASK(_ptr);
 	unsigned *head = _je_san_get_base(_base);
 	assert(head);
@@ -3377,6 +3378,7 @@ void* je_san_interior(void *_base, void *_ptr, size_t ID) {
 		fprintf(trace_fp, "Interior1:%p Interior2:%p base:%p ptr:%p\n", interior1, interior2, _base, _ptr);
 		//abort3("hi");
 	}
+#endif
 	return interior2;
 }
 
@@ -3737,6 +3739,24 @@ void* je_san_interior1(const void *_base, const void *_ptr) {
 	_ptr = (const void*)((size_t)_ptr | (offset << 48));
 	return je_san_interior((void*)_base, (void*)_ptr, 1001);
 }
+
+#if 0
+static void* je_san_interior2(const void *_base, const void *_ptr)
+{
+	struct obj_header *head = (struct obj_header*)_je_san_get_base1((void*)_base);
+	char *base = ((char*)&head[1]);
+	char *ptr = UNMASK(_ptr);
+	size_t offset = ptr - base;
+
+	if (offset < head->size) {
+		ptr = (char*)((size_t)ptr | (offset << 49));
+	}
+	else {
+		ptr = (char*)((size_t)ptr | (1ULL << 48));
+	}
+	return ptr;
+}
+#endif
 
 JEMALLOC_EXPORT
 void* je_san_interior_checked(void *_base, void *_ptr, size_t ptrsize, int ID) {
@@ -5258,6 +5278,8 @@ je_strtoul(const char *_nptr, char **_endptr, int base) {
 
 JEMALLOC_EXPORT
 char* je_strchr(const char *_s, int c) {
+	assert(!is_invalid_ptr((size_t)(_s)));
+
 	const char *s = (const char*)UNMASK(_s);
 	if (s[0] == (char)c) {
 		return (char*)_s;
