@@ -39,6 +39,7 @@ extern void *MinGlobalAddr;
 extern void *MaxGlobalAddr;
 extern void *LastCrashAddr1;
 extern void *LastCrashAddr2;
+static char *program_name = NULL;
 
 #define MAX_FAULTY_PAGES 4096
 #define PAGE_SHIFT 12
@@ -5149,18 +5150,46 @@ void posix_signal_handler(int sig, siginfo_t *siginfo, void *arg) {
 	signal_handler_invoked = true;
 }
 
+void trap_signal_handler(int sig, siginfo_t *siginfo, void *arg) {
+	static void* TrapEips[64];
+	static int NumTrapEips = 0;
+	ucontext_t *context = (ucontext_t *)arg;
+	void **stack = (void**)context->uc_mcontext.gregs[REG_RSP];
+	void *rip = stack[0];
+	int i;
+
+	for (i = 0; i < NumTrapEips; i++) {
+		if (TrapEips[i] == rip) {
+			return;
+		}
+	}
+	assert(NumTrapEips < 64);
+	TrapEips[NumTrapEips++] = rip;
+
+	char syscom[256];
+  sprintf(syscom,"addr2line %p -e %s", rip, program_name);
+      //last parameter is the file name of the symbol
+  int Ret = system(syscom);
+  assert(Ret != -1);
+	
+}
+
 void install_handler() {
 	struct sigaction sig_action = {};
 	sig_action.sa_sigaction = posix_signal_handler;
 	sigemptyset(&sig_action.sa_mask);
 	sig_action.sa_flags = SA_SIGINFO;
 	sigaction(SIGSEGV, &sig_action, NULL);
+	sig_action.sa_sigaction = trap_signal_handler;
+	sigaction(SIGTRAP, &sig_action, NULL);
 }
+
 
 
 JEMALLOC_EXPORT
 void* je_san_copy_argv(int argc, char **argv) {
 	enable_masking = 1;
+	program_name = argv[0];
 	MinLargeAddr = (void*)MAX_ULONG;
 	install_handler();
 	set_trace_fp();
