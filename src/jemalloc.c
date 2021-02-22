@@ -5207,6 +5207,33 @@ char *je_strstr(const char *_haystack, const char *_needle) {
 #define	ULONG_MAX	((unsigned long)(~0L))		/* 0xFFFFFFFF */
 #endif
 
+#if 0
+extern char *optarg;
+extern int optind;
+
+
+JEMALLOC_EXPORT
+int
+je_getopt(int argc, char * const argv[], const char *optstring)
+{
+	int ret;
+
+	static int (*fptr)(int, char * const[], const char*) = NULL;
+	if (fptr == NULL) {
+		fptr = get_func_addr("getopt", je_getopt);
+	}
+	ret = fptr(argc, argv, optstring);
+	if (optarg != NULL) {
+		struct obj_header *head = ((struct obj_header*)argv[optind-1]) - 1;
+		malloc_printf("head:%p optarg:%p\n", head, optarg);
+		assert(is_valid_obj_header(head));
+		assert(optarg >= (char*)&head[1] && optarg < ((char*)(&head[1]) + head->size));
+		optarg = je_san_interior1(&head[1], optarg);
+	}
+	return ret;
+}
+#endif
+
 JEMALLOC_EXPORT
 double
 je_strtod(const char *_nptr, char **_endptr) {
