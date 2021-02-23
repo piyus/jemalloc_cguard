@@ -5167,8 +5167,7 @@ void trap_signal_handler(int sig, siginfo_t *siginfo, void *arg) {
 	TrapEips[NumTrapEips++] = rip;
 
 	char syscom[256];
-  sprintf(syscom,"addr2line %p -e %s", rip, program_name);
-      //last parameter is the file name of the symbol
+  sprintf(syscom,"addr2line -a %p -fp -e %s", rip, program_name);
   int Ret = system(syscom);
   assert(Ret != -1);
 	
