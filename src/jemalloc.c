@@ -3055,6 +3055,36 @@ set_trace_fp() {
 
 
 JEMALLOC_EXPORT
+void je_san_typeset(uint64_t *ptr, uint64_t size, uint64_t tysize, uint64_t bitmap)
+{
+	size_t n_elem = size / tysize;
+	size_t i, j, k;
+	size_t idx = 0;
+	size_t max_idx = size / 8;
+
+	for (i = 0; i < n_elem; i++) {
+		k = 0;
+		for (j = 0; j < tysize/8; j++) {
+			if (((bitmap >> k) & 1)) {
+				ptr[idx] = 0;
+			}
+			idx++;
+			k = (k+1 == 64) ? 0 : k+1;
+		}
+	}
+	if (idx != max_idx) {
+		k = 0;
+		while (idx != max_idx) {
+			if (((bitmap >> k) & 1)) {
+				ptr[idx] = 0;
+			}
+			k = (k+1 == 64) ? 0 : k+1;
+			idx++;
+		}
+	}
+}
+
+JEMALLOC_EXPORT
 void je_san_trace(char *_name, int line, int type, unsigned long long val, unsigned long long _val) {
 	event_id++;
 	if (!can_print_in_trace_fp()) {
