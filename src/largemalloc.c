@@ -39,7 +39,6 @@ typedef struct Segment
 	int MaxCacheEntries;
 	struct Segment *Next;
 	size_t *Cache[MAX_CACHE_ENTRIES];
-	int NumCacheEntries;
 	unsigned long long BitMap[];
 } Segment;
 
@@ -135,8 +134,8 @@ static Segment* allocateSegment(size_t Idx)
 	S->NumFreePages = BitmapSize;
 	S->AlignmentMask = AlignmentMask;
 	S->AlignedSize = Alignment;
-	S->NumCacheEntries = 0;
 	S->MaxCacheEntries = 1;
+	memset(S->Cache, 0, sizeof(S->Cache));
 	S->Next = NULL;
 	//malloc_printf("Alloc Seg: %p Idx:%zd\n", S, Idx);
 
@@ -170,14 +169,40 @@ static void reclaimMemory(void *Ptr, size_t Size)
 	}
 }
 
+static int num_cache_entries(Segment *Cur)
+{
+	int NumCacheEntries = 0;
+	int i;
+	for (i = 0; i < MAX_CACHE_ENTRIES && Cur->Cache[i]; i++) {
+		NumCacheEntries++;
+	}
+	return NumCacheEntries;
+}
+
+static bool add_to_cache(Segment *Cur, void *Ptr, size_t Size)
+{
+	int i;
+	for (i = 0; i < MAX_CACHE_ENTRIES; i++) {
+		if (Cur->Cache[i] == NULL) {
+			Cur->Cache[i] = (size_t*)Ptr;
+			((size_t*)Ptr)[0] = Size;
+			return true;
+		}
+	}
+	return false;
+}
+
 static void san_largefree(void *Ptr, size_t Size)
 {
 	size_t AlignedSize = Align(Size, PAGE_SIZE);
 	Segment *Cur = ADDR_TO_SEGMENT(Ptr);
-	if (Cur->NumCacheEntries < Cur->MaxCacheEntries && Cur->AlignedSize <= MAX_CACHE_SIZE) {
-		Cur->Cache[Cur->NumCacheEntries] = (size_t*)Ptr;
-		((size_t*)Ptr)[0] = Size;
-		Cur->NumCacheEntries++;
+
+	int NumCacheEntries = num_cache_entries(Cur);
+
+	if (NumCacheEntries < Cur->MaxCacheEntries &&
+	    Cur->AlignedSize <= MAX_CACHE_SIZE &&
+			add_to_cache(Cur, Ptr, Size)) {
+		//malloc_printf("free cache:%zd alined:%zd num:%d\n", Size, AlignedSize, NumCacheEntries);
 		return;
 	}
 
@@ -190,6 +215,7 @@ static void san_largefree(void *Ptr, size_t Size)
 	size_t BitIdx = FreeIdx % 64;
 	Cur->BitMap[BitMapIdx] &= ~(1ULL << BitIdx);
 	Cur->NumFreePages++;
+	//malloc_printf("free:%zd\n", Size);
 }
 
 static int findFirstFreeIdx(unsigned long long BitVal)
@@ -204,6 +230,22 @@ static int findFirstFreeIdx(unsigned long long BitVal)
 	return -1;
 }
 
+static size_t *find_cache(Segment *Cur, bool *Empty) {
+	size_t *Ptr = NULL;
+	int Num = 0;
+	int i;
+	for (i = MAX_CACHE_ENTRIES -1; i >= 0 && Num < 2; i--) {
+		if (Cur->Cache[i] != NULL) {
+			if (Num == 0) {
+				Ptr = Cur->Cache[i];
+				Cur->Cache[i] = NULL;
+			}
+			Num++;
+		}
+	}
+	*Empty = (Num < 2);
+	return Ptr;
+}
 
 static void* san_largealloc(size_t Size)
 {
@@ -224,13 +266,13 @@ static void* san_largealloc(size_t Size)
 	}
 	assert(Cur->NumFreePages > 0);
 
-	if (Cur->NumCacheEntries) {
-		assert(Cur->NumCacheEntries > 0 && Cur->NumCacheEntries <= Cur->MaxCacheEntries);
+	bool Empty = false;
+	size_t *Ptr = find_cache(Cur, &Empty);
+	if (Ptr) {
+		//malloc_printf("cache: Size:%zd AlignedSz:%zd Num:%d\n", Size, AlignedSize, num_cache_entries(Cur));
 		assert(Cur->AlignedSize <= MAX_CACHE_SIZE);
-		size_t *Ptr = Cur->Cache[Cur->NumCacheEntries -1 ];
-		Cur->NumCacheEntries--;
-		if (Cur->NumCacheEntries == 0 && Cur->MaxCacheEntries != MAX_CACHE_ENTRIES) {
-			Cur->MaxCacheEntries++;
+		if (Empty && Cur->MaxCacheEntries != MAX_CACHE_ENTRIES) {
+			Cur->MaxCacheEntries++; // no sync needed; opt
 		}
 		return san_largerealloc(Ptr, Ptr[0], Size);
 	}
@@ -258,7 +300,7 @@ static void* san_largealloc(size_t Size)
 		return san_largealloc(Size);
 	}
 	//memset(Addr, 0, AlignedSize);
-	//malloc_printf("Large alloc: %p FreeIdx:%zd Idx:%zd Size:%zd AlignedSz:%zd\n", Addr, FreeIdx, Idx, Size, AlignedSize);
+	//malloc_printf("Size:%zd AlignedSz:%zd\n", Size, AlignedSize);
 	return Addr;
 }
 
