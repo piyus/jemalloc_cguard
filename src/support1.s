@@ -37,151 +37,7 @@
 # char *fasan_limit_check(char *base)
 
 fasan_limit_check:
-	movabs $(1ULL<<48), %rax
-	and %rdi, %rax
-	jne 3f
-
-	mov %rdi, %rax
-	shl $15, %rax
-	shr $15, %rax
-
-	cmp MinGlobalAddr, %rax
-	jbe 3f
-
-	mov %rdi, %rax
-	shr $49, %rax
-	cmp $0x7FFF, %rax
-	jae 1f
-
-	sub %rax, %rdi
-	mov %rdi, %rax
-	shl $16, %rax
-	shr $16, %rax
-
-	movw -8(%rax), %di
-	jmp 4f
-	nop
-	nop
-	nop
-	nop
-	nop
-	nop
-	nop
-4:
-	cmp $0xface, %di
-	jne 3f
-	ret
-
-1:
-	movabs $0xFFFF00000000ULL, %rax
-	and %rdi, %rax
-	cmp MaxGlobalAddr, %rax
-	jbe 5f
-	and (%rax), %rdi
-	add $8, %rdi
-	mov %rdi, %rax
-	ret
-
-5:
-	push %rdi
-	push %rcx
-
-	shl $15, %rdi
-	shr $15, %rdi
-
-	movq GlobalCache, %rax
-	cmp %rdi, %rax
-	ja 10f
-	movl -4(%rax), %ecx
-	add %rax, %rcx
-	cmp %rdi, %rcx
-	jbe 10f
-
-	pop %rcx
-	pop %rdi
-	ret
-10:
-	movq GlobalCache+8, %rax
-	cmp %rdi, %rax
-	ja 10f
-	movl -4(%rax), %ecx
-	add %rax, %rcx
-	cmp %rdi, %rcx
-	jbe 10f
-
-	pop %rcx
-	pop %rdi
-	ret
-
-10:
-	movq GlobalCache+16, %rax
-	cmp %rdi, %rax
-	ja 10f
-	movl -4(%rax), %ecx
-	add %rax, %rcx
-	cmp %rdi, %rcx
-	jbe 10f
-
-	pop %rcx
-	pop %rdi
-	ret
-
-10:
-	movq GlobalCache+24, %rax
-	cmp %rdi, %rax
-	ja 10f
-	movl -4(%rax), %ecx
-	add %rax, %rcx
-	cmp %rdi, %rcx
-	jbe 10f
-
-	pop %rcx
-	pop %rdi
-	ret
-
-
-10:
-	pop %rcx
-	pop %rdi
-
-
-	push %rcx
-	push %rdx
-	push %rsi
-	push %r8
-	push %r9
 	push %r10
-	push %r11
-
-
-	call san_get_limit_check
-
-	pop %r11
-	pop %r10
-	pop %r9
-	pop %r8
-	pop %rsi
-	pop %rdx
-	pop %rcx
-
-	cmp $0, %rax
-	je 3f
-
-	movw -8(%rax), %di
-	cmp $0xface, %di
-	jne 2f
-	ret
-
-2:
-	int3
-	ret
-
-3:
-	xor %rax, %rax
-	ret
-
-
-fasan_limit_check1:
 	movabs $(1ULL<<48), %rax
 	and %rdi, %rax
 	jne 3f
@@ -190,7 +46,8 @@ fasan_limit_check1:
 	shl $15, %rax
 	shr $15, %rax
 
-	cmp MinGlobalAddr, %rax
+	movabsq $MinGlobalAddr, %r10
+	cmp (%r10), %rax
 	jbe 3f
 
 	mov %rdi, %rax
@@ -201,21 +58,39 @@ fasan_limit_check1:
 	movabs $0xFFFF00000000ULL, %rax
 	and %rdi, %rax
 
-	cmp MaxGlobalAddr, %rax
+	movabsq $MaxGlobalAddr, %r10
+	cmp (%r10), %rax
 	jbe 5f
 
-	push %rcx
-	movq 8(%rax), %rcx
-	cmp $0xdeaddeed, %ecx
-	jne 2f
 	and (%rax), %rdi
 	add $8, %rdi
 	mov %rdi, %rax
-	movw -8(%rax), %di
-	cmp $0xface, %di
-	jne 2f
-	pop %rcx
+	pop %r10
 	ret
+
+1:
+	sub %rax, %rdi
+	mov %rdi, %rax
+	shl $16, %rax
+	shr $16, %rax
+
+	movw -8(%rax), %di
+	jmp 4f
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+4:
+	cmp $0xface, %di
+	jne 3f
+
+	pop %r10
+
+	ret
+
 
 5:
 
@@ -225,7 +100,8 @@ fasan_limit_check1:
 	shl $15, %rdi
 	shr $15, %rdi
 
-	movq GlobalCache, %rax
+	movabsq $GlobalCache, %r10
+	movq (%r10), %rax
 	cmp %rdi, %rax
 	ja 10f
 	movl -4(%rax), %ecx
@@ -235,9 +111,10 @@ fasan_limit_check1:
 
 	pop %rcx
 	pop %rdi
+	pop %r10
 	ret
 10:
-	movq GlobalCache+8, %rax
+	movq 8(%r10), %rax
 	cmp %rdi, %rax
 	ja 10f
 	movl -4(%rax), %ecx
@@ -247,23 +124,11 @@ fasan_limit_check1:
 
 	pop %rcx
 	pop %rdi
-	ret
-
-10:
-	movq GlobalCache+16, %rax
-	cmp %rdi, %rax
-	ja 10f
-	movl -4(%rax), %ecx
-	add %rax, %rcx
-	cmp %rdi, %rcx
-	jbe 10f
-
-	pop %rcx
-	pop %rdi
+	pop %r10
 	ret
 
 10:
-	movq GlobalCache+24, %rax
+	movq 16(%r10), %rax
 	cmp %rdi, %rax
 	ja 10f
 	movl -4(%rax), %ecx
@@ -273,6 +138,21 @@ fasan_limit_check1:
 
 	pop %rcx
 	pop %rdi
+	pop %r10
+	ret
+
+10:
+	movq 24(%r10), %rax
+	cmp %rdi, %rax
+	ja 10f
+	movl -4(%rax), %ecx
+	add %rax, %rcx
+	cmp %rdi, %rcx
+	jbe 10f
+
+	pop %rcx
+	pop %rdi
+	pop %r10
 	ret
 
 
@@ -306,61 +186,19 @@ fasan_limit_check1:
 	movw -8(%rax), %di
 	cmp $0xface, %di
 	jne 2f
-
+	pop %r10
 	ret
-
-1:
-	sub %rax, %rdi
-	mov %rdi, %rax
-	shl $16, %rax
-	shr $16, %rax
-
-	mov %rax, %rdi
-	shr $12, %rdi
-	#cmp %rdi, LastCrashAddr1
-	#je 3f
-	#cmp %rdi, LastCrashAddr2
-	#je 3f
-	movw -8(%rax), %di
-	jmp 4f
-	nop
-	nop
-	nop
-	nop
-	nop
-	nop
-	nop
-4:
-	cmp $0xface, %di
-	jne 5f
-
-	ret
-
-#1:
-#	cmp $0x1dead, %rdi
-#	je 3f
-#	cmp __text_start, %rax
-#	jb 2f
-#	cmp __text_end, %rax
-#	jae 2f
-#	jmp 3f
 
 2:
 	int3
+	pop %r10
 	ret
 
 3:
 	xor %rax, %rax
+	pop %r10
 	ret
 
-5:
-	#mov LastCrashAddr1, %rax
-	#mov %rdi, LastCrashAddr1
-	#mov %rax, LastCrashAddr2
-	xor %rax, %rax
-	ret
-	
-	
 
 fasan_check_size:
 	int3
@@ -570,35 +408,37 @@ fasan_limit:
 	shl $16, %rax
 	shr $16, %rax
 	ret
-
 1:
+	push %r10
 	movabs $0xFFFF00000000ULL, %rax
 	and %rdi, %rax
-	cmp MaxGlobalAddr, %rax
+	movabsq $MaxGlobalAddr, %r10
+	cmp (%r10), %rax
 	jbe 5f
 	and (%rax), %rdi
 	add $8, %rdi
 	mov %rdi, %rax
+	pop %r10
 	ret
+
 
 5:
 	push %rcx
-
 	shl $15, %rdi
 	shr $15, %rdi
-
-	movq GlobalCache, %rax
+	movabsq $GlobalCache, %r10
+	movq (%r10), %rax
 	cmp %rdi, %rax
 	ja 10f
 	movl -4(%rax), %ecx
 	add %rax, %rcx
 	cmp %rdi, %rcx
 	jbe 10f
-
 	pop %rcx
+	pop %r10
 	ret
 10:
-	movq GlobalCache+8, %rax
+	movq 8(%r10), %rax
 	cmp %rdi, %rax
 	ja 10f
 	movl -4(%rax), %ecx
@@ -607,22 +447,11 @@ fasan_limit:
 	jbe 10f
 
 	pop %rcx
-	ret
-
-10:
-	movq GlobalCache+16, %rax
-	cmp %rdi, %rax
-	ja 10f
-	movl -4(%rax), %ecx
-	add %rax, %rcx
-	cmp %rdi, %rcx
-	jbe 10f
-
-	pop %rcx
+	pop %r10
 	ret
 
 10:
-	movq GlobalCache+24, %rax
+	movq 16(%r10), %rax
 	cmp %rdi, %rax
 	ja 10f
 	movl -4(%rax), %ecx
@@ -631,6 +460,20 @@ fasan_limit:
 	jbe 10f
 
 	pop %rcx
+	pop %r10
+	ret
+
+10:
+	movq 24(%r10), %rax
+	cmp %rdi, %rax
+	ja 10f
+	movl -4(%rax), %ecx
+	add %rax, %rcx
+	cmp %rdi, %rcx
+	jbe 10f
+
+	pop %rcx
+	pop %r10
 	ret
 
 
@@ -661,142 +504,11 @@ fasan_limit:
 	cmp $0xface, %di
 	jne 2f
 
-	ret
-
-
-2:
-	int3
-	ret
-
-
-# char *fasan_limit(char *base)
-fasan_limit1:
-	mov %rdi, %rax
-	shr $49, %rax
-	cmp $0x7FFF, %rax
-	jl 1f
-
-	movabs $0xFFFF00000000ULL, %rax
-	and %rdi, %rax
-
-	cmp MaxGlobalAddr, %rax
-	jbe 5f
-
-	push %rcx
-	movq 8(%rax), %rcx
-	cmp $0xdeaddeed, %ecx
-	jne 2f
-	and (%rax), %rdi
-	add $8, %rdi
-	mov %rdi, %rax
-	movw -8(%rax), %di
-	cmp $0xface, %di
-	jne 2f
-	pop %rcx
-	ret
-
-5:
-	push %rdi
-	push %rcx
-
-	shl $15, %rdi
-	shr $15, %rdi
-
-	movq GlobalCache, %rax
-	cmp %rdi, %rax
-	ja 10f
-	movl -4(%rax), %ecx
-	add %rax, %rcx
-	cmp %rdi, %rcx
-	jbe 10f
-
-	pop %rcx
-	pop %rdi
-	ret
-10:
-	movq GlobalCache+8, %rax
-	cmp %rdi, %rax
-	ja 10f
-	movl -4(%rax), %ecx
-	add %rax, %rcx
-	cmp %rdi, %rcx
-	jbe 10f
-
-	pop %rcx
-	pop %rdi
-	ret
-
-10:
-	movq GlobalCache+16, %rax
-	cmp %rdi, %rax
-	ja 10f
-	movl -4(%rax), %ecx
-	add %rax, %rcx
-	cmp %rdi, %rcx
-	jbe 10f
-
-	pop %rcx
-	pop %rdi
-	ret
-
-10:
-	movq GlobalCache+24, %rax
-	cmp %rdi, %rax
-	ja 10f
-	movl -4(%rax), %ecx
-	add %rax, %rcx
-	cmp %rdi, %rcx
-	jbe 10f
-
-	pop %rcx
-	pop %rdi
-	ret
-
-
-10:
-	pop %rcx
-	pop %rdi
-
-
-	
-
-	push %rcx
-	push %rdx
-	push %rsi
-	push %r8
-	push %r9
-	push %r10
-	push %r11
-
-
-	call san_page_fault_limit1
-
-	pop %r11
 	pop %r10
-	pop %r9
-	pop %r8
-	pop %rsi
-	pop %rdx
-	pop %rcx
-
-	movw -8(%rax), %di
-	cmp $0xface, %di
-	jne 2f
-
 	ret
 
-1:
-	sub %rax, %rdi
-	mov %rdi, %rax
-	shl $16, %rax
-	shr $16, %rax
-
-	movw -8(%rax), %di
-	cmp $0xface, %di
-	jne 2f
-
-	ret
 
 2:
 	int3
+	pop %r10
 	ret
