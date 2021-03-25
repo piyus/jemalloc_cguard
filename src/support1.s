@@ -238,10 +238,10 @@ fasan_bounds:
 
 	ret
 3:
-	int3
+#	int3
 	ret
 2:
-	int3
+#	int3
 	ret
 
 fasan_bounds1:
@@ -255,10 +255,10 @@ fasan_bounds1:
 
 	ret
 3:
-	int3
+	#int3
 	ret
 2:
-	int3
+	#int3
 	ret
 
 
@@ -407,6 +407,9 @@ fasan_limit:
 	mov %rdi, %rax
 	shl $16, %rax
 	shr $16, %rax
+	movw -8(%rax), %di
+	cmp $0xface, %di
+	jne 3f
 	ret
 1:
 	push %r10
@@ -511,4 +514,8 @@ fasan_limit:
 2:
 	int3
 	pop %r10
+	ret
+
+3:
+	int3
 	ret

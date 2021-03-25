@@ -3049,7 +3049,10 @@ static inline void
 set_trace_fp() {
 	if (trace_fp == NULL) {
 		trace_fp = fopen("trace.txt", "w");
-		assert(trace_fp != NULL);
+		if (trace_fp == NULL) {
+			trace_fp = fopen("trace1.txt", "w");
+			assert(trace_fp != NULL);
+		}
 	}
 }
 
@@ -4271,6 +4274,29 @@ char *je_strerror(int errnum)
 }
 
 JEMALLOC_EXPORT
+void *je_san_mmap(void *_addr, size_t length, int prot, int flags,
+                  int fd, off_t offset)
+{
+	void *addr = UNMASK(_addr);
+	void *ret = mmap(addr, length+PAGE_SIZE, prot, flags, fd, offset);
+	if (ret != MAP_FAILED) {
+		ret = make_obj_header(ret+PAGE_SIZE-OBJ_HEADER_SIZE, length, 0, 0);
+	}
+	//malloc_printf("mmap:: %p fd:%d\n", ret, fd);
+	return ret;
+}
+
+JEMALLOC_EXPORT
+int je_san_munmap(void *addr, size_t length)
+{
+	//return munmap(addr-PAGE_SIZE, length);
+	struct obj_header *head = (struct obj_header*)(addr - OBJ_HEADER_SIZE);
+	assert(is_valid_obj_header(head));
+	//malloc_printf("munmap:: %p\n", head);
+	return munmap(addr-PAGE_SIZE, length+PAGE_SIZE);
+}
+
+JEMALLOC_EXPORT
 struct tm *je_localtime(const time_t *timep) {
 	static struct tm* ret = NULL;
 	if (ret == NULL) {
@@ -4506,13 +4532,15 @@ static void restore_varg(unsigned long long **fixes, unsigned long long *vals, i
 	}
 }
 
-
+#if 0
 JEMALLOC_EXPORT
 int je_pthread_create(pthread_t *_thread, const pthread_attr_t *_attr,
-                   void *(*start_routine) (void *), void *arg)
+                   void *(*_start_routine) (void *), void *_arg)
 {
 	pthread_t *thread = (pthread_t*)UNMASK(_thread);
 	const pthread_attr_t *attr = (const pthread_attr_t*)UNMASK(_attr);
+	void *(*start_routine) (void *) = (void *(*) (void *))UNMASK(_start_routine);
+	void *arg = UNMASK(_arg);
 
 	int (*fptr)(pthread_t *, const pthread_attr_t *,
               void *(*start_routine) (void *), void *) = NULL;
@@ -4522,6 +4550,7 @@ int je_pthread_create(pthread_t *_thread, const pthread_attr_t *_attr,
 	}
 	return fptr(thread, attr, start_routine, arg);
 }
+#endif
 
 JEMALLOC_EXPORT
 int je_vsprintf(char *str, const char *format, va_list ap) {
@@ -4610,10 +4639,10 @@ int je_asprintf (char **string_ptr, const char *format, ...)
 }
 
 
-#undef __ctype_b_loc
+//#undef __ctype_b_loc
 
 JEMALLOC_EXPORT
-const unsigned short** je___ctype_b_loc(void)
+const unsigned short** je____ctype_b_loc(void)
 {
 	static unsigned short **retptr = NULL;
 	if (retptr != NULL) {
@@ -4627,9 +4656,7 @@ const unsigned short** je___ctype_b_loc(void)
 	ret = (unsigned short*)je_malloc(size);
 	assert(ret);
 
-	unsigned short** (*fptr)(void) = NULL;
-	fptr = get_func_addr("__ctype_b_loc", je___ctype_b_loc);
-	unsigned short **orig = fptr();
+	unsigned short **orig = (unsigned short**)__ctype_b_loc();
 	memcpy(ret, orig[0]-128, size);
 	unsigned short *reti = ret + 128;
 	retptr[0] = (unsigned short*)get_interior((size_t)reti, 128 * (sizeof(unsigned short)));
