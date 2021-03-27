@@ -4552,6 +4552,41 @@ int je_pthread_create(pthread_t *_thread, const pthread_attr_t *_attr,
 }
 #endif
 
+#include <netdb.h>
+
+JEMALLOC_EXPORT
+int je_gethostbyname_r(const char *name,
+               struct hostent *ret, char *buf, size_t buflen,
+               struct hostent **result, int *h_errnop)
+{
+	static int (*fptr)(const char*, struct hostent*, char*, size_t,
+		struct hostent**, int*) = NULL;
+
+	if (fptr == NULL) {
+		fptr = get_func_addr("gethostbyname_r", je_gethostbyname_r);
+		assert(fptr);
+	}
+
+	struct hostent *retval = *result;
+  int r = fptr(name, ret, buf, buflen, result, h_errnop);
+	retval = *result;
+
+	int i = 0;
+	size_t offset;
+	while (retval->h_addr_list[i]) {
+		char *ptr = retval->h_addr_list[i];
+		offset = (size_t)(ptr - buf);
+		assert(offset < buflen);
+		retval->h_addr_list[i] = (char*)get_interior((size_t)retval->h_addr_list[i], offset);
+		i++;
+	}
+	offset = (size_t)((char*)retval->h_addr_list - buf);
+	assert(offset < buflen);
+	retval->h_addr_list = (char**)get_interior((size_t)retval->h_addr_list, offset);
+
+  return r;
+}
+
 JEMALLOC_EXPORT
 int je_vsprintf(char *str, const char *format, va_list ap) {
 	unsigned long long *fixes[MAX_INTERIOR];
