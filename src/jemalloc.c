@@ -4533,14 +4533,15 @@ static void restore_varg(unsigned long long **fixes, unsigned long long *vals, i
 }
 
 #if 0
+// pthread comes first in library order
+// need to fix arg
 JEMALLOC_EXPORT
 int je_pthread_create(pthread_t *_thread, const pthread_attr_t *_attr,
-                   void *(*_start_routine) (void *), void *_arg)
+                   void *(*_start_routine) (void *), void *arg)
 {
 	pthread_t *thread = (pthread_t*)UNMASK(_thread);
 	const pthread_attr_t *attr = (const pthread_attr_t*)UNMASK(_attr);
 	void *(*start_routine) (void *) = (void *(*) (void *))UNMASK(_start_routine);
-	void *arg = UNMASK(_arg);
 
 	int (*fptr)(pthread_t *, const pthread_attr_t *,
               void *(*start_routine) (void *), void *) = NULL;
