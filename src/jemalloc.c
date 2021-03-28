@@ -4251,6 +4251,28 @@ char *je_setlocale(int category, const char *locale) {
 }
 
 JEMALLOC_EXPORT
+char *je_strerror_r(int errnum, char *buf, size_t buflen)
+{
+	static char *ret = NULL;
+	static char* (*fptr)(int, char*, size_t) = NULL;
+
+	if (fptr == NULL) {
+		fptr = get_func_addr("strerror_r", je_strerror_r);
+		assert(fptr);
+	}
+	char *ret1 = fptr(errnum, buf, buflen);
+	if (ret1) {
+		size_t len = strlen(ret1);
+		if (ret == NULL || !strcmp(ret, ret1)) {
+			char *ret = je_malloc(len+1);
+			memcpy(ret, ret1, len);
+			ret[len] = '\0';
+		}
+	}
+	return ret;
+}
+
+JEMALLOC_EXPORT
 char *je_strerror(int errnum)
 {
 	static char *ret[128] = {NULL};
@@ -4530,6 +4552,29 @@ static void restore_varg(unsigned long long **fixes, unsigned long long *vals, i
 	for (i = 0; i < num_fixes; i++) {
 		*(fixes[i]) = vals[i];
 	}
+}
+
+JEMALLOC_EXPORT
+const char *je_hstrerror(int err)
+{
+	static char *ret[128] = {NULL};
+	assert(err < 128);
+	if (ret[err] != NULL) {
+		return ret[err];
+	}
+
+	static char* (*fptr)(int) = NULL;
+	if (fptr == NULL) {
+		fptr = get_func_addr("hstrerror", je_hstrerror);
+		assert(fptr);
+	}
+	char *ret1 = fptr(err);
+	size_t len = strlen(ret1);
+	char *ret2 = je_malloc(len+1);
+	ret[err] = ret2;
+	memcpy(ret2, ret1, len);
+	ret2[len] = '\0';
+	return ret2;
 }
 
 #if 0
