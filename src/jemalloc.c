@@ -5401,6 +5401,24 @@ je_getopt(int argc, char * const argv[], const char *optstring)
 #endif
 
 JEMALLOC_EXPORT
+int je_san_sigaction(int signum, const struct sigaction *_act,
+                     struct sigaction *_oldact)
+{
+	struct sigaction *act = (struct sigaction*)UNMASK(_act);
+	struct sigaction *oldact = (struct sigaction*)UNMASK(_oldact);
+	if (act) {
+		void (*handler)(int) = (void(*)(int))UNMASK(act->sa_handler);
+		void (*action)(int,siginfo_t*,void*) = 
+			(void(*)(int,siginfo_t*,void*))UNMASK(act->sa_sigaction);
+		void (*restorer)(void) = (void(*)(void))UNMASK(act->sa_restorer);
+		act->sa_handler = handler;
+		act->sa_sigaction = action;
+		act->sa_restorer = restorer;
+	}
+	return sigaction(signum, act, oldact);
+}
+
+JEMALLOC_EXPORT
 double
 je_strtod(const char *_nptr, char **_endptr) {
 	double ret;
