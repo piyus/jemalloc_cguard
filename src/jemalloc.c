@@ -4309,8 +4309,9 @@ void *je_san_mmap(void *_addr, size_t length, int prot, int flags,
 }
 
 JEMALLOC_EXPORT
-int je_san_munmap(void *addr, size_t length)
+int je_san_munmap(void *_addr, size_t length)
 {
+	void *addr = UNMASK(_addr);
 	//return munmap(addr-PAGE_SIZE, length);
 	struct obj_header *head = (struct obj_header*)(addr - OBJ_HEADER_SIZE);
 	assert(is_valid_obj_header(head));
