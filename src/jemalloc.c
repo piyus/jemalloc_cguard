@@ -4296,6 +4296,50 @@ char *je_strerror(int errnum)
 }
 
 JEMALLOC_EXPORT
+ssize_t je_writev(int fd, const struct iovec *iov, int iovcnt)
+{
+	void *base[iovcnt];
+	int i;
+
+	for (i = 0; i < iovcnt; i++) {
+		base[i] = iov[i].iov_base;
+		*(void**)(&iov[i].iov_base) = UNMASK(base[i]);
+	}
+	static ssize_t (*fptr)(int, const struct iovec*, int) = NULL;
+	if (fptr == NULL) {
+		fptr = get_func_addr("writev", je_writev);
+		assert(fptr);
+	}
+	ssize_t ret = fptr(fd, iov, iovcnt);
+	for (i = 0; i < iovcnt; i++) {
+		*(void**)(&iov->iov_base) = base[i];
+	}
+	return ret;
+}
+
+JEMALLOC_EXPORT
+ssize_t je_readv(int fd, const struct iovec *iov, int iovcnt)
+{
+	void *base[iovcnt];
+	int i;
+
+	for (i = 0; i < iovcnt; i++) {
+		base[i] = iov[i].iov_base;
+		*(void**)(&iov[i].iov_base) = UNMASK(base[i]);
+	}
+	static ssize_t (*fptr)(int, const struct iovec*, int) = NULL;
+	if (fptr == NULL) {
+		fptr = get_func_addr("readv", je_readv);
+		assert(fptr);
+	}
+	ssize_t ret = fptr(fd, iov, iovcnt);
+	for (i = 0; i < iovcnt; i++) {
+		*(void**)(&iov->iov_base) = base[i];
+	}
+	return ret;
+}
+
+JEMALLOC_EXPORT
 void *je_san_mmap(void *_addr, size_t length, int prot, int flags,
                   int fd, off_t offset)
 {
