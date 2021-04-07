@@ -4770,7 +4770,7 @@ int je_asprintf (char **string_ptr, const char *format, ...)
 JEMALLOC_EXPORT
 const unsigned short** je____ctype_b_loc(void)
 {
-	static unsigned short **retptr = NULL;
+	static __thread unsigned short **retptr = NULL;
 	if (retptr != NULL) {
 		return (const unsigned short**)retptr;
 	}
@@ -4790,12 +4790,12 @@ const unsigned short** je____ctype_b_loc(void)
 }
 
 
-#undef __ctype_toupper_loc
+//#undef __ctype_toupper_loc
 
 JEMALLOC_EXPORT
-const __int32_t** je___ctype_toupper_loc(void)
+const __int32_t** je____ctype_toupper_loc(void)
 {
-	static int **retptr = NULL;
+	static __thread int **retptr = NULL;
 	if (retptr != NULL) {
 		return (const int**)retptr;
 	}
@@ -4807,9 +4807,7 @@ const __int32_t** je___ctype_toupper_loc(void)
 	ret = (int*)je_malloc(size);
 	assert(ret);
 
-	int** (*fptr)(void) = NULL;
-	fptr = get_func_addr("__ctype_toupper_loc", je___ctype_toupper_loc);
-	int **orig = fptr();
+	const int **orig = __ctype_toupper_loc();
 	memcpy(ret, orig[0]-128, size);
 	int *reti = ret + 128;
 	retptr[0] = (int*)get_interior((size_t)reti, 128 * sizeof(int));
@@ -4817,12 +4815,12 @@ const __int32_t** je___ctype_toupper_loc(void)
 }
 
 
-#undef __ctype_tolower_loc
+//#undef __ctype_tolower_loc
 
 JEMALLOC_EXPORT
-const __int32_t** je___ctype_tolower_loc(void)
+const __int32_t** je____ctype_tolower_loc(void)
 {
-	static int **retptr = NULL;
+	static __thread int **retptr = NULL;
 	if (retptr != NULL) {
 		return (const int**)retptr;
 	}
@@ -4834,9 +4832,7 @@ const __int32_t** je___ctype_tolower_loc(void)
 	ret = (int*)je_malloc(size);
 	assert(ret);
 
-	int** (*fptr)(void) = NULL;
-	fptr = get_func_addr("__ctype_tolower_loc", je___ctype_tolower_loc);
-	int **orig = fptr();
+	const int **orig = __ctype_tolower_loc();
 	memcpy(ret, orig[0]-128, size);
 	int *reti = ret + 128;
 	retptr[0] = (int*)get_interior((size_t)reti, 128*sizeof(int));
