@@ -48,6 +48,35 @@ static char *program_name = NULL;
 #define MAX_OFFSET ((1ULL<<15) - 1)
 
 #if 0
+static void print_allocations(size_t total_alloc_sz)
+{
+	static size_t total_alloc = 0;
+	static size_t total_large_alloc = 0;
+	static size_t temp_alloc = 0;
+	static size_t temp_large_alloc = 0;
+
+	if (total_alloc_sz >= MAX_OFFSET) {
+		temp_large_alloc += total_alloc_sz;
+	}
+	else {
+		temp_alloc += total_alloc_sz;
+	}
+	if (temp_alloc > 10000) {
+		total_alloc += temp_alloc;
+		malloc_printf("total_alloc:%zd\n", total_alloc + total_large_alloc);
+		temp_alloc = 0;
+	}
+	else if (temp_large_alloc > 10000) {
+		total_large_alloc += temp_large_alloc;
+		malloc_printf("total_large_alloc:%zd\n", total_large_alloc);
+		temp_large_alloc = 0;
+	}
+}
+#endif
+
+#define print_allocations(x)
+
+#if 0
 
 static size_t FaultyPages[MAX_FAULTY_PAGES] = {0};
 
@@ -3506,6 +3535,7 @@ je_malloc(size_t size) {
 		return NULL;
 	}
 
+	print_allocations(size);
 	void *ret;
 	if (size < MAX_OFFSET) {
 		ret = _je_malloc(size + OBJ_HEADER_SIZE);
@@ -5823,6 +5853,7 @@ je_aligned_alloc(size_t alignment, size_t _size) {
 	if (alignment == 8 || alignment == 4 || alignment <= 2) {
 		return je_malloc(_size);
 	}
+	print_allocations(_size);
 	size_t size = _size + ALIGN_PAD(alignment);
 	size_t offset;
 
@@ -6007,6 +6038,7 @@ JEMALLOC_ATTR(malloc) JEMALLOC_ALLOC_SIZE2(1, 2)
 je_calloc(size_t num, size_t size) {
 	size_t total_size = num * size;
 	void *ret;
+	print_allocations(total_size);
 	if (total_size < MAX_OFFSET) {
 		ret = _je_malloc(total_size + OBJ_HEADER_SIZE);
 	}
@@ -6293,6 +6325,7 @@ je_realloc(void *_ptr, size_t arg_size) {
 	void *ptr = UNMASK(_ptr);
 	struct obj_header *head = NULL;
 	size_t sz = 0;
+	print_allocations(arg_size);
 	if (ptr) {
 		head = (struct obj_header*)(ptr - OBJ_HEADER_SIZE);
 		assert(head);
