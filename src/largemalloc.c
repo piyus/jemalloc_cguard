@@ -27,7 +27,7 @@ typedef unsigned long long ulong64;
 #define MAX_CACHE_ENTRIES 32
 extern void *MinLargeAddr;
 
-static void *san_largerealloc(void *Ptr, size_t OldSize, size_t NewSize);
+static void *_san_largerealloc(void *Ptr, size_t OldSize, size_t NewSize);
 
 typedef struct Segment
 {
@@ -40,6 +40,7 @@ typedef struct Segment
 	struct Segment *Next;
 	size_t *Cache[MAX_CACHE_ENTRIES];
 	int NumCacheEntries;
+	pthread_mutex_t lock;
 	unsigned long long BitMap[];
 } Segment;
 
@@ -56,7 +57,8 @@ size_t GetLargeIndex(size_t size)
   return -1;
 }
 
-__thread struct Segment *Segments[32] = {NULL};
+struct Segment *Segments[32] = {NULL};
+pthread_mutex_t SegmentLock = PTHREAD_MUTEX_INITIALIZER;
 size_t TotalCommitMem = 0;
 size_t TotalDeCommitMem = 0;
 
@@ -138,6 +140,7 @@ static Segment* allocateSegment(size_t Idx)
 	S->NumCacheEntries = 0;
 	S->MaxCacheEntries = 1;
 	S->Next = NULL;
+	pthread_mutex_init(&S->lock, NULL);
 	//malloc_printf("Alloc Seg: %p Idx:%zd\n", S, Idx);
 
 	return S;
@@ -170,19 +173,24 @@ static void reclaimMemory(void *Ptr, size_t Size)
 	}
 }
 
-static void san_largefree(void *Ptr, size_t Size)
+static void _san_largefree(void *Ptr, size_t Size)
 {
 	size_t AlignedSize = Align(Size, PAGE_SIZE);
 	Segment *Cur = ADDR_TO_SEGMENT(Ptr);
+
+	pthread_mutex_lock(&Cur->lock);
 	if (Cur->NumCacheEntries < Cur->MaxCacheEntries && Cur->AlignedSize <= MAX_CACHE_SIZE) {
 		Cur->Cache[Cur->NumCacheEntries] = (size_t*)Ptr;
 		((size_t*)Ptr)[0] = Size;
 		//malloc_printf("free cache:%zd alined:%zd num:%d\n", Size, AlignedSize, Cur->NumCacheEntries);
 		Cur->NumCacheEntries++;
+		pthread_mutex_unlock(&Cur->lock);
 		return;
 	}
 
+	pthread_mutex_unlock(&Cur->lock);
 	reclaimMemory(Ptr, AlignedSize);
+	pthread_mutex_lock(&Cur->lock);
 	size_t FreeIdx = ((char*)Ptr - (char*)Cur) / Cur->AlignedSize;
 	assert(FreeIdx > 0);
 	FreeIdx -= 1;
@@ -191,7 +199,12 @@ static void san_largefree(void *Ptr, size_t Size)
 	size_t BitIdx = FreeIdx % 64;
 	Cur->BitMap[BitMapIdx] &= ~(1ULL << BitIdx);
 	Cur->NumFreePages++;
+	pthread_mutex_unlock(&Cur->lock);
 	//malloc_printf("free:%zd\n", Size);
+}
+
+static void san_largefree(void *Ptr, size_t Size) {
+	_san_largefree(Ptr, Size);
 }
 
 static int findFirstFreeIdx(unsigned long long BitVal)
@@ -207,7 +220,7 @@ static int findFirstFreeIdx(unsigned long long BitVal)
 }
 
 
-static void* san_largealloc(size_t Size)
+static void* _san_largealloc(size_t Size)
 {
 	size_t AlignedSize = Align(Size, PAGE_SIZE);
 	size_t Idx = GetLargeIndex(AlignedSize);
@@ -218,13 +231,27 @@ static void* san_largealloc(size_t Size)
 		Cur = Cur->Next;
 	}
 	if (Cur == NULL) {
-		Cur = allocateSegment(Idx);
-		if (Segments[Idx] != NULL) {
-			Cur->Next = Segments[Idx];
+		pthread_mutex_lock(&SegmentLock);
+		Cur = Segments[Idx];
+		while (Cur != NULL && Cur->NumFreePages == 0) {
+			Cur = Cur->Next;
 		}
-		Segments[Idx] = Cur;
+		if (Cur == NULL) {
+			Cur = allocateSegment(Idx);
+			if (Segments[Idx] != NULL) {
+				Cur->Next = Segments[Idx];
+			}
+			Segments[Idx] = Cur;
+		}
+		pthread_mutex_unlock(&SegmentLock);
 	}
-	assert(Cur->NumFreePages > 0);
+
+	pthread_mutex_lock(&Cur->lock);
+	if (Cur->NumFreePages == 0) {
+		pthread_mutex_unlock(&Cur->lock);
+		return _san_largealloc(Size);
+	}
+
 
 	if (Cur->NumCacheEntries) {
 		//malloc_printf("cache: Size:%zd AlignedSz:%zd Num:%d\n", Size, AlignedSize, Cur->NumCacheEntries);
@@ -235,7 +262,9 @@ static void* san_largealloc(size_t Size)
 		if (Cur->NumCacheEntries == 0 && Cur->MaxCacheEntries != MAX_CACHE_ENTRIES) {
 			Cur->MaxCacheEntries++;
 		}
-		return san_largerealloc(Ptr, Ptr[0], Size);
+
+		pthread_mutex_unlock(&Cur->lock);
+		return _san_largerealloc(Ptr, Ptr[0], Size);
 	}
 
 	size_t i;
@@ -256,9 +285,11 @@ static void* san_largealloc(size_t Size)
 
 	char *Addr = (char*)(Cur) + ((FreeIdx + 1) * Cur->AlignedSize);
 	Cur->NumFreePages--;
+	pthread_mutex_unlock(&Cur->lock);
+
 	bool Ret = allowAccess(Addr, AlignedSize);
 	if (Ret == false) {
-		return san_largealloc(Size);
+		return _san_largealloc(Size);
 	}
 	//memset(Addr, 0, AlignedSize);
 	//malloc_printf("Large alloc: %p FreeIdx:%zd Idx:%zd Size:%zd AlignedSz:%zd\n", Addr, FreeIdx, Idx, Size, AlignedSize);
@@ -266,7 +297,12 @@ static void* san_largealloc(size_t Size)
 	return Addr;
 }
 
-static void *san_largerealloc(void *Ptr, size_t OldSize, size_t NewSize)
+static void* san_largealloc(size_t Size) {
+	void *ret = _san_largealloc(Size);
+	return ret;
+}
+
+static void *_san_largerealloc(void *Ptr, size_t OldSize, size_t NewSize)
 {
 	size_t OldAlignedSize = Align(OldSize, PAGE_SIZE);
 	size_t NewAlignedSize = Align(NewSize, PAGE_SIZE);
@@ -283,10 +319,16 @@ static void *san_largerealloc(void *Ptr, size_t OldSize, size_t NewSize)
 		assert(Ret);
 		return Ptr;
 	}
-	void *NewPtr = san_largealloc(NewSize);
+	void *NewPtr = _san_largealloc(NewSize);
 	memcpy(NewPtr, Ptr, OldSize);
-	san_largefree(Ptr, OldSize);
+	_san_largefree(Ptr, OldSize);
 	return NewPtr;
+}
+
+static void *san_largerealloc(void *Ptr, size_t OldSize, size_t NewSize)
+{
+	void *ret = _san_largerealloc(Ptr, OldSize, NewSize);
+	return ret;
 }
 
 static void *san_largeheader(void *Ptr)
