@@ -5356,6 +5356,7 @@ void posix_signal_handler(int sig, siginfo_t *siginfo, void *arg) {
 	//void *addr = siginfo->si_addr;
   //fprintf(trace_fp, "Address from where crash happen is %llx %p %zx\n",context->uc_mcontext.gregs[REG_RIP], addr, (size_t)addr);
 	context->uc_mcontext.gregs[REG_RIP] = context->uc_mcontext.gregs[REG_RIP] + 8;
+	assert (*(unsigned char*)(context->uc_mcontext.gregs[REG_RIP]) == 0x90);
 	signal_handler_invoked = true;
 }
 
