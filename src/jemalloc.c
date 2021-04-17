@@ -139,6 +139,12 @@ static void abort3(const char *msg)
 	assert(0);
 }
 
+JEMALLOC_EXPORT
+void je_san_abort()
+{
+	abort3("bounds");
+}
+
 static inline bool is_valid_obj_header(struct obj_header *head) {
 	return head->magic == MAGIC_NUMBER;
 }
@@ -3140,17 +3146,23 @@ void je_san_trace(char *_name, int line, int type, unsigned long long val, unsig
 		//if ((val1 >> 48) == 0xcaba) {
 			//fprintf(err_fp, "[%lld] ld: %s:%d -> %llx\n", id, name, line, val1);
 		//}
-		if (val) {
-			fprintf(trace_fp, "ld: %p = [%p] line:%d\n", (void*)val, (void*)_val, line);
-		}
+		//if (val) {
+			fprintf(trace_fp, "ld: x = [%p] line:%d\n", (void*)val, line);
+			if (((size_t)val) >> 48) {
+				abort3("invalid address ld");
+			}
+		//}
 	}
 	else if (type == STORE_TY) {
 		//if ((val >> 48) == 0xcaba) {
 			//fprintf(err_fp, "[%lld] st: %s:%d -> %llx\n", id, name, line, val1);
 		//}
-		if (val) {
+		//if (val) {
 			fprintf(trace_fp, "st: [%p] = %p line:%d\n", (void*)_val, (void*)val, line);
-		}
+		//}
+			if (((size_t)_val) >> 48) {
+				abort3("invalid address st");
+			}
 	}
 	else if (type == PTR_TO_INT_TY) {
 		//if ((val1 >> 48) == 0xcaba) {
@@ -5354,7 +5366,8 @@ void je_san_enable_mask() {
 void posix_signal_handler(int sig, siginfo_t *siginfo, void *arg) {
 	ucontext_t *context = (ucontext_t *)arg;
 	//void *addr = siginfo->si_addr;
-  //fprintf(trace_fp, "Address from where crash happen is %llx %p %zx\n",context->uc_mcontext.gregs[REG_RIP], addr, (size_t)addr);
+ // malloc_printf("Address from where crash happen is %llx %p %zx\n",context->uc_mcontext.gregs[REG_RIP], addr, (size_t)addr);
+//	malloc_printf("rax:%p rbx:%p\n", (void*)context->uc_mcontext.gregs[REG_RAX], (void*)context->uc_mcontext.gregs[REG_RBX]);
 	context->uc_mcontext.gregs[REG_RIP] = context->uc_mcontext.gregs[REG_RIP] + 8;
 	assert (*(unsigned char*)(context->uc_mcontext.gregs[REG_RIP]) == 0x90);
 	signal_handler_invoked = true;

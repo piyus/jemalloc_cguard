@@ -11,6 +11,7 @@
 .extern san_page_fault_limit1
 .extern san_get_limit_check
 .extern abort
+.extern san_abort
 
 # .comm name, size, alignment
 
@@ -401,9 +402,13 @@ fasan_bounds:
 	ret
 3:
 	int3
+	xor %rdi, %rdi
+	call san_abort
 	ret
 2:
 	int3
+	xor %rdi, %rdi
+	call san_abort
 	ret
 
 fasan_bounds1:
@@ -418,9 +423,13 @@ fasan_bounds1:
 	ret
 3:
 	int3
+	xor %rdi, %rdi
+	call san_abort
 	ret
 2:
 	int3
+	xor %rdi, %rdi
+	call san_abort
 	ret
 
 
