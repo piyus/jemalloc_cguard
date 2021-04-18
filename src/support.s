@@ -402,13 +402,13 @@ fasan_bounds:
 	ret
 3:
 	int3
-	xor %rdi, %rdi
-	call san_abort
+	#xor %rdi, %rdi
+	#call san_abort
 	ret
 2:
 	int3
-	xor %rdi, %rdi
-	call san_abort
+	#xor %rdi, %rdi
+	#call san_abort
 	ret
 
 fasan_bounds1:
@@ -423,13 +423,13 @@ fasan_bounds1:
 	ret
 3:
 	int3
-	xor %rdi, %rdi
-	call san_abort
+	#xor %rdi, %rdi
+	#call san_abort
 	ret
 2:
 	int3
-	xor %rdi, %rdi
-	call san_abort
+	#xor %rdi, %rdi
+	#call san_abort
 	ret
 
 
