@@ -40,7 +40,7 @@
 fasan_limit_check:
 	movabs $(1ULL<<48), %rax
 	and %rdi, %rax
-	jne 3f
+	jne 8f
 
 	mov %rdi, %rax
 	shl $15, %rax
@@ -181,6 +181,43 @@ fasan_limit_check:
 	xor %rax, %rax
 	ret
 
+8:
+	mov %rdi, %rax
+	shr $49, %rax
+	je 3b
+	cmp $0x7FFF, %rax
+	jae 3b
+	sub %rax, %rdi
+	mov %rdi, %rax
+	shl $16, %rax
+	shr $16, %rax
+	cmp $0, %rax
+	je 1f
+	#mov %rax, %rdi
+	#shr $40, %rdi
+	#cmp $0x7f, %rdi
+	#jne 3b
+
+	movw -8(%rax), %di
+	jmp 4f
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+4:
+	cmp $0xface, %di
+	jne 2f
+
+1:
+	ret
+
+2:
+	mov %rax, %rdi
+	call san_abort
+	ret
 
 fasan_limit_check1:
 	movabs $(1ULL<<48), %rax

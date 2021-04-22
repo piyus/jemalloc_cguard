@@ -140,8 +140,11 @@ static void abort3(const char *msg)
 }
 
 JEMALLOC_EXPORT
-void je_san_abort()
+void je_san_abort(void *ptr)
 {
+	if (trace_fp) {
+		fprintf(trace_fp, "unexpected pointer: %p\n", ptr);
+	}
 	abort3("bounds");
 }
 
@@ -3147,7 +3150,7 @@ void je_san_trace(char *_name, int line, int type, unsigned long long val, unsig
 			//fprintf(err_fp, "[%lld] ld: %s:%d -> %llx\n", id, name, line, val1);
 		//}
 		//if (val) {
-			fprintf(trace_fp, "ld: x = [%p] line:%d\n", (void*)val, line);
+			fprintf(trace_fp, "ld: %p = [%p] line:%d\n", *(void**)val, (void*)val, line);
 			if (((size_t)val) >> 48) {
 				abort3("invalid address ld");
 			}
@@ -5366,11 +5369,12 @@ void je_san_enable_mask() {
 void posix_signal_handler(int sig, siginfo_t *siginfo, void *arg) {
 	ucontext_t *context = (ucontext_t *)arg;
 	//void *addr = siginfo->si_addr;
- // malloc_printf("Address from where crash happen is %llx %p %zx\n",context->uc_mcontext.gregs[REG_RIP], addr, (size_t)addr);
-//	malloc_printf("rax:%p rbx:%p\n", (void*)context->uc_mcontext.gregs[REG_RAX], (void*)context->uc_mcontext.gregs[REG_RBX]);
+  //fprintf(trace_fp, "Address from where crash happen is %llx %p %zx\n",context->uc_mcontext.gregs[REG_RIP], addr, (size_t)addr);
+	//fprintf(trace_fp, "rax:%p rbx:%p\n", (void*)context->uc_mcontext.gregs[REG_RAX], (void*)context->uc_mcontext.gregs[REG_RBX]);
 	context->uc_mcontext.gregs[REG_RIP] = context->uc_mcontext.gregs[REG_RIP] + 8;
 	assert (*(unsigned char*)(context->uc_mcontext.gregs[REG_RIP]) == 0x90);
 	signal_handler_invoked = true;
+	//san_abort(siginfo->si_addr);
 }
 
 void trap_signal_handler(int sig, siginfo_t *siginfo, void *arg) {
