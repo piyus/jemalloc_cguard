@@ -5374,7 +5374,7 @@ void posix_signal_handler(int sig, siginfo_t *siginfo, void *arg) {
 	context->uc_mcontext.gregs[REG_RIP] = context->uc_mcontext.gregs[REG_RIP] + 8;
 	assert (*(unsigned char*)(context->uc_mcontext.gregs[REG_RIP]) == 0x90);
 	signal_handler_invoked = true;
-	//san_abort(siginfo->si_addr);
+	san_abort(siginfo->si_addr);
 }
 
 void trap_signal_handler(int sig, siginfo_t *siginfo, void *arg) {

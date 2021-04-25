@@ -46,8 +46,10 @@ fasan_limit_check:
 	shl $15, %rax
 	shr $15, %rax
 
-	cmp MinGlobalAddr, %rax
-	jbe 3f
+	cmp $0, %rax
+	je 3f
+	#cmp MinGlobalAddr, %rax
+	#jbe 3f
 
 	mov %rdi, %rax
 	shr $49, %rax
