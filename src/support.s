@@ -186,7 +186,7 @@ fasan_limit_check:
 8:
 	mov %rdi, %rax
 	shr $49, %rax
-	je 3b
+	#je 3b
 	cmp $0x7FFF, %rax
 	jae 3b
 	sub %rax, %rdi
