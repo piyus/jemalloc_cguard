@@ -3597,6 +3597,7 @@ void* je_san_get_limit(void *ptr) {
 
 JEMALLOC_EXPORT
 char* je_san_make_interior(char *ptr) {
+	assert(0);
 	char* optr = UNMASK(ptr);
 	assert(optr != ptr);
 	char *base = (char*)_je_san_get_base(ptr);
@@ -3839,6 +3840,7 @@ static void* je_san_interior2(const void *_base, const void *_ptr)
 
 JEMALLOC_EXPORT
 void* je_san_interior_checked(void *_base, void *_ptr, size_t ptrsize, int ID) {
+	assert(0);
 	if (_base == _ptr) {
 		return _ptr;
 	}
