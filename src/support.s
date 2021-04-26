@@ -38,31 +38,21 @@
 # char *fasan_limit_check(char *base)
 
 fasan_limit_check:
-	movabs $(1ULL<<48), %rax
-	and %rdi, %rax
-	jne 8f
-
 	mov %rdi, %rax
-	shl $15, %rax
-	shr $15, %rax
-
-	cmp $0, %rax
-	je 3f
-	#cmp MinGlobalAddr, %rax
-	#jbe 3f
-
-	mov %rdi, %rax
-	shr $49, %rax
-	cmp $0x7FFF, %rax
+	shr $48, %rax
+	cmp $0xFFFE, %rax
 	jae 1f
 
+	shr $1, %rax
 	sub %rax, %rdi
 	mov %rdi, %rax
 	shl $16, %rax
 	shr $16, %rax
+	#cmp $0, %rax
+	#je 3f
 
-	movw -8(%rax), %di
-	jmp 4f
+	cmovnew -8(%rax), %di
+	ret
 	nop
 	nop
 	nop
@@ -71,11 +61,14 @@ fasan_limit_check:
 	nop
 	nop
 4:
-	cmp $0xface, %di
-	jne 3f
+	#cmp $0xface, %di
+	#jne 3f
+	xor %rax, %rax
 	ret
 
 1:
+	cmp $0xFFFF, %rax
+	je 4b
 	movabs $0xFFFF00000000ULL, %rax
 	and %rdi, %rax
 	cmp MaxGlobalAddr, %rax
