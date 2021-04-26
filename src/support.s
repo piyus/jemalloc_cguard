@@ -48,10 +48,9 @@ fasan_limit_check:
 	mov %rdi, %rax
 	shl $16, %rax
 	shr $16, %rax
-	#cmp $0, %rax
-	#je 3f
+	je 4f
 
-	cmovnew -8(%rax), %di
+	movw -8(%rax), %di
 	ret
 	nop
 	nop
