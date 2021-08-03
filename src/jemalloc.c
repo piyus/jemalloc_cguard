@@ -2909,6 +2909,140 @@ static void addToGlobalCache(void *ptr) {
 	GlobalCache[0] = ptr;
 }
 
+struct Record {
+	unsigned long long Addr;
+	unsigned char BaseReg;
+	unsigned char len;
+	int Offset;
+	int BaseOffset;
+};
+
+static int PF_NumRecords = 0;
+static int PF_MaxRecords = 0;
+static struct Record *PF_Recs = NULL;
+
+static void AddRecords(unsigned long long Addr, unsigned char BaseReg, unsigned char len, int Offset, int BaseOffset) {
+	struct Record *Tmp;
+
+	if (PF_NumRecords == PF_MaxRecords) {
+		PF_MaxRecords += 64;
+		Tmp = malloc(sizeof(struct Record) * PF_MaxRecords);
+		memcpy(Tmp, PF_Recs, sizeof(struct Record) * PF_NumRecords);
+	}
+	PF_Recs[PF_NumRecords].Addr = Addr;
+	PF_Recs[PF_NumRecords].BaseReg = BaseReg;
+	PF_Recs[PF_NumRecords].len = len;
+	PF_Recs[PF_NumRecords].Offset = Offset;
+	PF_Recs[PF_NumRecords].BaseOffset = BaseOffset;
+	PF_NumRecords++;
+}
+
+static struct Record* SearchRecord(unsigned long long Addr)
+{
+	int i;
+	for (i = 0; i < PF_NumRecords; i++) {
+		if (PF_Recs[i].Addr == Addr) {
+			return &PF_Recs[i];
+		}
+	}
+	return NULL;
+}
+
+
+struct Header {
+  unsigned char version;       //: Stack Map Version (current version is 3)
+  unsigned char Reserved1; //  : Reserved (expected to be 0)
+  unsigned short Reserved2; //: Reserved (expected to be 0)
+	unsigned NumFunctions;
+	unsigned NumConstants;
+	unsigned NumRecords;
+};
+
+struct FuncInfo { // Num Functions
+  unsigned long long FunAddr;
+  unsigned long long StackSize;
+  unsigned long long RecordCount;
+};
+
+// Num Constants
+//unsigned long long LargeConstant;
+
+// NumRecords {
+
+struct LocMetadata {
+  unsigned long long PatchPointID;
+  unsigned InstructionOffset;
+  unsigned short Reserved;
+  unsigned short NumLocations;
+};
+
+struct LocData { // NumLocations
+	unsigned char  Type; //: Register | Direct | Indirect | Constant | ConstantIndex
+  unsigned char  Reserved1;
+  unsigned short LocationSize;
+  unsigned short BaseRegister;
+  unsigned short Reserved2;
+  int  Offset;
+};
+
+//check alignment 8
+
+struct LiveMetadata {
+	unsigned short padding;
+  unsigned short NumLiveOuts;
+};
+
+struct LiveData {
+	unsigned short RegNum;
+	unsigned char Reserved;
+	unsigned char Size;
+};
+//check alignment 8
+// } // NumRecords
+
+
+struct LocMetadata* PrintRecord(unsigned long long FunAddr, struct LocMetadata *l)
+{
+	assert(l->NumLocations == 2);
+	unsigned long long CurAddr = FunAddr + l->InstructionOffset;
+	struct LocData *ld = (struct LocData*)(l + 1);
+	int BaseOffset = ld[0].Offset;
+	int BaseReg = ld[1].BaseRegister;
+	int Disp = ld[1].Offset;
+	int locsize0 = ld[0].LocationSize;
+	int locsize1 = ld[1].LocationSize;
+
+	malloc_printf("loc_size1:%d loc_size2:%d\n", locsize0, locsize1);
+
+	malloc_printf("#%llx [#%d #%d] :: #%d\n", CurAddr, BaseReg, Disp, BaseOffset);
+	struct LiveMetadata *live = (struct LiveMetadata*)(((size_t)(ld+2) + 7) & ~(size_t)7ULL);
+	assert(live->NumLiveOuts == 0);
+	struct LocMetadata *Ret = (struct LocMetadata*)(((size_t)(live+1) + 7) & ~(size_t)7ULL);
+	return Ret;
+}
+
+static char *stackmap = NULL;
+static size_t stackmap_size = 0;
+
+static void print_stackmap(char *Stackmap) {
+	struct Header *h = (struct Header*)Stackmap;
+	int NumFunctions = h->NumFunctions;
+	int NumConstants = h->NumConstants;
+	//int NumRecords = h->NumRecords;
+	struct FuncInfo *f = (struct FuncInfo*)(h+1);
+	int j, k;
+
+	struct LocMetadata *l = (struct LocMetadata*)(((char*)&f[NumFunctions]) + NumConstants * sizeof(unsigned long long));
+
+	k = 0;
+	while (k != NumFunctions) {
+		for (j = 0; j < (int)f[k].RecordCount; j++) {
+			l = PrintRecord(f[k].FunAddr, l);
+		}
+		k++;
+	}
+}
+
 static void
 initialize_sections()
 {
@@ -2961,6 +3095,16 @@ initialize_sections()
 	for (i = 0; i < Header->e_shnum; i++)
 	{
 		char *Name = Strtab + Shdr[i].sh_name;
+		malloc_printf("Section:: %s\n", Name);
+		if (!strncmp(Name, ".llvm_stackmaps", 15)) {
+			char *start = Base + Shdr[i].sh_offset;
+			size_t size = Shdr[i].sh_size;
+			stackmap = malloc(size);
+			stackmap_size = size;
+			memcpy(stackmap, start, size);
+			malloc_printf("Found StackMap Section start:%p size:%zd\n", start, size);
+			print_stackmap(stackmap);
+		}
 		if (strncmp(Name, ".text", 6))
 		{
 			struct obj_header *start, *end;
