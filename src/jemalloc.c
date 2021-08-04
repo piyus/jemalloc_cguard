@@ -2917,7 +2917,14 @@ struct Record {
 	int Offset;
 	int BaseOffset;
 	int size;
+	//unsigned char data[6];
 };
+
+static char *stackmap = NULL;
+static size_t stackmap_size = 0;
+static char *textmap = NULL;
+static size_t textmap_size = 0;
+static size_t textmap_start = 0;
 
 static int PF_NumRecords = 0;
 static int PF_MaxRecords = 0;
@@ -2940,6 +2947,9 @@ static void AddRecords(unsigned long long Addr, unsigned char BaseReg, unsigned 
 	PF_Recs[PF_NumRecords].Offset = Offset;
 	PF_Recs[PF_NumRecords].BaseOffset = BaseOffset;
 	PF_Recs[PF_NumRecords].size = size;
+	/*assert(len <= 6);
+	size_t textoffset = Addr - textmap_start;
+	memcpy(PF_Recs[PF_NumRecords].data, &textmap[textoffset], len);*/
 	PF_NumRecords++;
 }
 
@@ -3027,8 +3037,6 @@ struct LocMetadata* PrintRecord(unsigned long long FunAddr, struct LocMetadata *
 	return Ret;
 }
 
-static char *stackmap = NULL;
-static size_t stackmap_size = 0;
 
 static void print_stackmap(char *Stackmap) {
 	struct Header *h = (struct Header*)Stackmap;
@@ -3049,6 +3057,72 @@ static void print_stackmap(char *Stackmap) {
 	}
 }
 
+static void
+initialize_stackmap()
+{
+	char Exec[PATH_SZ];
+	ssize_t Count = readlink( "/proc/self/exe", Exec, PATH_SZ);
+	if (Count == -1) {
+		return;
+	}
+	Exec[Count] = '\0';
+
+	int fd = open(Exec, O_RDONLY);
+	if (fd == -1) {
+		return;
+	}
+
+	struct stat Statbuf;
+	fstat(fd, &Statbuf);
+
+	char *Base = mmap(NULL, Statbuf.st_size, PROT_READ, MAP_SHARED, fd, 0);
+	if (Base == NULL) {
+		close(fd);
+		return;
+	}
+
+	Elf64_Ehdr *Header = (Elf64_Ehdr*)Base;
+
+	if (Header->e_ident[0] != 0x7f
+		|| Header->e_ident[1] != 'E'
+		|| Header->e_ident[2] != 'L'
+		|| Header->e_ident[3] != 'F')
+	{
+		goto out;
+	}
+
+	Elf64_Shdr *Shdr = (Elf64_Shdr*)(Base + Header->e_shoff);
+	char *Strtab = Base + Shdr[Header->e_shstrndx].sh_offset;
+	int i;
+
+	for (i = 0; i < Header->e_shnum; i++)
+	{
+		char *Name = Strtab + Shdr[i].sh_name;
+		if (!strncmp(Name, ".llvm_stackmaps", 15)) {
+			char *start = Base + Shdr[i].sh_offset;
+			size_t size = Shdr[i].sh_size;
+			stackmap = start;
+			stackmap_size = size;
+		}
+		if (!strncmp(Name, ".text", 6))
+		{
+			char *start = Base + Shdr[i].sh_offset;
+			size_t size = Shdr[i].sh_size;
+			textmap = start;
+			textmap_size = size;
+			textmap_start = Shdr[i].sh_addr;
+		}
+	}
+	if (stackmap) {
+		print_stackmap(stackmap);
+	}
+
+out:
+	munmap(Base, Statbuf.st_size);
+	close(fd);
+}
+
+
 static int RegIDToGregsID(int reg) {
 	switch (reg) {
 		case 1: return REG_RAX;
@@ -3058,12 +3132,14 @@ static int RegIDToGregsID(int reg) {
 		case 5: return REG_RDI;
 		case 6: return REG_RDX;
 		case 9: return REG_RSI;
-		case 11: return REG_R10; 
-		case 12: return REG_R11;
-		case 13: return REG_R12;
-		case 14: return REG_R13;
-		case 15: return REG_R14;
-		case 16: return REG_R15;
+		case 11: return REG_R8; 
+		case 12: return REG_R9;
+		case 13: return REG_R10; 
+		case 14: return REG_R11;
+		case 15: return REG_R12;
+		case 16: return REG_R13;
+		case 17: return REG_R14;
+		case 18: return REG_R15;
 	}
 	assert(0);
 }
@@ -3080,12 +3156,76 @@ static void CheckValidAccess(unsigned long long StartAddr, unsigned long long Fa
 	malloc_printf("no access violation!\n");
 }
 
+static unsigned long long EmitStub(unsigned char *CurEIP, int len, int BaseReg)
+{
+	static unsigned char *StubCurAddr = NULL;
+	static unsigned char *StubEndAddr = NULL;
+	if (StubEndAddr - StubCurAddr < 16) {
+		StubCurAddr = mmap(NULL, 4096, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANON, -1, 0);
+		assert(StubCurAddr);
+	}
+	else {
+		mprotect((void*)((size_t)StubCurAddr & ~4095ULL), 4096, PROT_READ|PROT_WRITE);
+	}
+	unsigned long long Ret = (unsigned long long)StubCurAddr;
+	memcpy(StubCurAddr, CurEIP, len);
+	StubCurAddr += len;
+	if (BaseReg >= REG_R8 && BaseReg <= REG_R15) {
+		StubCurAddr[0] = 0x41;
+		StubCurAddr++;
+	}
+	switch (BaseReg) {
+		case REG_RAX: StubCurAddr[0] = 0x58; break;
+		case REG_RCX: StubCurAddr[0] = 0x59; break;
+		case REG_RDX: StubCurAddr[0] = 0x5a; break;
+		case REG_RBX: StubCurAddr[0] = 0x5b; break;
+		case REG_RBP: StubCurAddr[0] = 0x5d; break;
+		case REG_RSI: StubCurAddr[0] = 0x5e; break;
+		case REG_RDI: StubCurAddr[0] = 0x5f; break;
+		case REG_R8: StubCurAddr[0] = 0x58;  break;
+		case REG_R9: StubCurAddr[0] = 0x59;  break;
+		case REG_R10: StubCurAddr[0] = 0x5a; break;
+		case REG_R11: StubCurAddr[0] = 0x5b; break;
+		case REG_R12: StubCurAddr[0] = 0x5c; break;
+		case REG_R13: StubCurAddr[0] = 0x5d; break;
+		case REG_R14: StubCurAddr[0] = 0x5e; break;
+		case REG_R15: StubCurAddr[0] = 0x5f; break;
+		default: assert(0);
+	}
+	StubCurAddr++;
+	StubCurAddr[0] = 0xc3;
+	StubCurAddr++;
+	mprotect((void*)((size_t)StubCurAddr & ~4095ULL), 4096, PROT_READ|PROT_EXEC);
+	return Ret;
+}
+
+static void SoftwareEmulate(unsigned long long CurEIP, unsigned long long *gregs, struct Record *Rec)
+{
+	int Reg = RegIDToGregsID(Rec->BaseReg);
+	int len = Rec->len;
+	int Offset = Rec->Offset;
+	int BaseOffset = Rec->BaseOffset;
+	int Size = Rec->size;
+	unsigned long long RegAddr = gregs[Reg];
+	unsigned long long *RSP = (unsigned long long*)gregs[REG_RSP];
+	RSP -= 1;
+	RSP[0] = (CurEIP + len);
+	RSP -= 1;
+	RSP[0] = RegAddr; 
+	gregs[REG_RSP] = (unsigned long long)RSP;
+	gregs[Reg] = (RegAddr << 16) >> 16;
+
+	if (!Rec->TargetAddr) {
+		Rec->TargetAddr = EmitStub((unsigned char*)CurEIP, len, Reg);
+	}
+	gregs[REG_RIP] = Rec->TargetAddr;
+}
+
 static void EmulateInstruction(unsigned long long CurEIP, unsigned long long *gregs)
 {
 	//malloc_printf("CurEIP:%llx\n", CurEIP);
 	if (PF_NumRecords == 0) {
-		print_stackmap(stackmap);
-		free(stackmap);
+		initialize_stackmap(stackmap);
 	}
 	struct Record *Rec = SearchRecord(CurEIP);
 	if (Rec == NULL) {
@@ -3101,6 +3241,7 @@ static void EmulateInstruction(unsigned long long CurEIP, unsigned long long *gr
 	unsigned long long StartAddr = FaultAddr - BaseOffset;
 	//malloc_printf("FaultAddr:%llx StartAddr:%llx\n", FaultAddr, StartAddr);
 	CheckValidAccess(StartAddr, FaultAddr, Size);
+	SoftwareEmulate(CurEIP, gregs, Rec);
 }
 
 static void
@@ -3155,13 +3296,6 @@ initialize_sections()
 	for (i = 0; i < Header->e_shnum; i++)
 	{
 		char *Name = Strtab + Shdr[i].sh_name;
-		if (!strncmp(Name, ".llvm_stackmaps", 15)) {
-			char *start = Base + Shdr[i].sh_offset;
-			size_t size = Shdr[i].sh_size;
-			stackmap = malloc(size);
-			stackmap_size = size;
-			memcpy(stackmap, start, size);
-		}
 		if (strncmp(Name, ".text", 6))
 		{
 			struct obj_header *start, *end;
@@ -5571,7 +5705,7 @@ void je_san_enable_mask() {
 
 void posix_signal_handler(int sig, siginfo_t *siginfo, void *arg) {
 	ucontext_t *context = (ucontext_t *)arg;
-	unsigned long long *gregs = context->uc_mcontext.gregs;
+	unsigned long long *gregs = (unsigned long long*)context->uc_mcontext.gregs;
 	//void *addr = siginfo->si_addr;
 	//malloc_printf("addr: %p\n", addr);
   //fprintf(trace_fp, "Address from where crash happen is %llx %p %zx\n",context->uc_mcontext.gregs[REG_RIP], addr, (size_t)addr);
@@ -5580,7 +5714,7 @@ void posix_signal_handler(int sig, siginfo_t *siginfo, void *arg) {
 	//assert (*(unsigned char*)(context->uc_mcontext.gregs[REG_RIP]) == 0x90);
 	signal_handler_invoked = true;
 	EmulateInstruction(gregs[REG_RIP], gregs);
-	san_abort(siginfo->si_addr);
+	//san_abort(siginfo->si_addr);
 }
 
 void trap_signal_handler(int sig, siginfo_t *siginfo, void *arg) {
