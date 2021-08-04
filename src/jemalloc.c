@@ -3098,12 +3098,6 @@ initialize_stackmap()
 	for (i = 0; i < Header->e_shnum; i++)
 	{
 		char *Name = Strtab + Shdr[i].sh_name;
-		if (!strncmp(Name, ".llvm_stackmaps", 15)) {
-			char *start = Base + Shdr[i].sh_offset;
-			size_t size = Shdr[i].sh_size;
-			stackmap = start;
-			stackmap_size = size;
-		}
 		if (!strncmp(Name, ".text", 6))
 		{
 			char *start = Base + Shdr[i].sh_offset;
@@ -3111,10 +3105,20 @@ initialize_stackmap()
 			textmap = start;
 			textmap_size = size;
 			textmap_start = Shdr[i].sh_addr;
+			break;
 		}
 	}
-	if (stackmap) {
-		print_stackmap(stackmap);
+
+	for (i = 0; i < Header->e_shnum; i++)
+	{
+		char *Name = Strtab + Shdr[i].sh_name;
+		if (!strncmp(Name, ".llvm_stackmaps", 15)) {
+			char *start = Base + Shdr[i].sh_offset;
+			size_t size = Shdr[i].sh_size;
+			stackmap = start;
+			stackmap_size = size;
+			print_stackmap(stackmap);
+		}
 	}
 
 out:
@@ -3149,11 +3153,12 @@ static void CheckValidAccess(unsigned long long StartAddr, unsigned long long Fa
 	struct obj_header *head = (struct obj_header*)get_fast_base(StartAddr);
 	unsigned long long Base = (unsigned long long)(head+1);
 	unsigned long long Limit = Base + head->size;
+	//malloc_printf("limit:%llx Base:%llx\n", Limit, Base);
 	if (FaultAddr < (unsigned long long)(head+1)  || (FaultAddr + size) > Limit) {
 		malloc_printf("access violation!\n");
 		abort3("access violation");
 	}
-	malloc_printf("no access violation!\n");
+	//malloc_printf("no access violation!\n");
 }
 
 static unsigned long long EmitStub(unsigned char *CurEIP, int len, int BaseReg)
@@ -3229,6 +3234,7 @@ static void EmulateInstruction(unsigned long long CurEIP, unsigned long long *gr
 	}
 	struct Record *Rec = SearchRecord(CurEIP);
 	if (Rec == NULL) {
+		assert(0);
 		return;
 	}
 	int Reg = RegIDToGregsID(Rec->BaseReg);
@@ -3239,7 +3245,7 @@ static void EmulateInstruction(unsigned long long CurEIP, unsigned long long *gr
 	unsigned long long FaultAddr = gregs[Reg] + Offset;
 	FaultAddr = ((FaultAddr << 16) >> 16);
 	unsigned long long StartAddr = FaultAddr - BaseOffset;
-	//malloc_printf("FaultAddr:%llx StartAddr:%llx\n", FaultAddr, StartAddr);
+	//malloc_printf("FaultAddr:%llx StartAddr:%llx Reg:%d\n", FaultAddr, StartAddr, Reg);
 	CheckValidAccess(StartAddr, FaultAddr, Size);
 	SoftwareEmulate(CurEIP, gregs, Rec);
 }
