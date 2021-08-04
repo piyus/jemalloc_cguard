@@ -2911,6 +2911,7 @@ static void addToGlobalCache(void *ptr) {
 
 struct Record {
 	unsigned long long Addr;
+	unsigned long long TargetAddr;
 	unsigned char BaseReg;
 	unsigned char len;
 	int Offset;
@@ -2923,14 +2924,17 @@ static int PF_MaxRecords = 0;
 static struct Record *PF_Recs = NULL;
 
 static void AddRecords(unsigned long long Addr, unsigned char BaseReg, unsigned char len, int Offset, int BaseOffset, int size) {
+	//malloc_printf("AddRecords:: Addr:%llx\n", Addr);
 	struct Record *Tmp;
 
 	if (PF_NumRecords == PF_MaxRecords) {
 		PF_MaxRecords += 64;
 		Tmp = malloc(sizeof(struct Record) * PF_MaxRecords);
 		memcpy(Tmp, PF_Recs, sizeof(struct Record) * PF_NumRecords);
+		PF_Recs = Tmp;
 	}
 	PF_Recs[PF_NumRecords].Addr = Addr;
+	PF_Recs[PF_NumRecords].TargetAddr = 0;
 	PF_Recs[PF_NumRecords].BaseReg = BaseReg;
 	PF_Recs[PF_NumRecords].len = len;
 	PF_Recs[PF_NumRecords].Offset = Offset;
@@ -3045,6 +3049,60 @@ static void print_stackmap(char *Stackmap) {
 	}
 }
 
+static int RegIDToGregsID(int reg) {
+	switch (reg) {
+		case 1: return REG_RAX;
+		case 2: return REG_RBP; 
+		case 3: return REG_RBX;
+		case 4: return REG_RCX;
+		case 5: return REG_RDI;
+		case 6: return REG_RDX;
+		case 9: return REG_RSI;
+		case 11: return REG_R10; 
+		case 12: return REG_R11;
+		case 13: return REG_R12;
+		case 14: return REG_R13;
+		case 15: return REG_R14;
+		case 16: return REG_R15;
+	}
+	assert(0);
+}
+
+static void CheckValidAccess(unsigned long long StartAddr, unsigned long long FaultAddr, int size)
+{
+	struct obj_header *head = (struct obj_header*)get_fast_base(StartAddr);
+	unsigned long long Base = (unsigned long long)(head+1);
+	unsigned long long Limit = Base + head->size;
+	if (FaultAddr < (unsigned long long)(head+1)  || (FaultAddr + size) > Limit) {
+		malloc_printf("access violation!\n");
+		abort3("access violation");
+	}
+	malloc_printf("no access violation!\n");
+}
+
+static void EmulateInstruction(unsigned long long CurEIP, unsigned long long *gregs)
+{
+	//malloc_printf("CurEIP:%llx\n", CurEIP);
+	if (PF_NumRecords == 0) {
+		print_stackmap(stackmap);
+		free(stackmap);
+	}
+	struct Record *Rec = SearchRecord(CurEIP);
+	if (Rec == NULL) {
+		return;
+	}
+	int Reg = RegIDToGregsID(Rec->BaseReg);
+	int len = Rec->len;
+	int Offset = Rec->Offset;
+	int BaseOffset = Rec->BaseOffset;
+	int Size = Rec->size;
+	unsigned long long FaultAddr = gregs[Reg] + Offset;
+	FaultAddr = ((FaultAddr << 16) >> 16);
+	unsigned long long StartAddr = FaultAddr - BaseOffset;
+	//malloc_printf("FaultAddr:%llx StartAddr:%llx\n", FaultAddr, StartAddr);
+	CheckValidAccess(StartAddr, FaultAddr, Size);
+}
+
 static void
 initialize_sections()
 {
@@ -3103,7 +3161,6 @@ initialize_sections()
 			stackmap = malloc(size);
 			stackmap_size = size;
 			memcpy(stackmap, start, size);
-			print_stackmap(stackmap);
 		}
 		if (strncmp(Name, ".text", 6))
 		{
@@ -5514,12 +5571,15 @@ void je_san_enable_mask() {
 
 void posix_signal_handler(int sig, siginfo_t *siginfo, void *arg) {
 	ucontext_t *context = (ucontext_t *)arg;
+	unsigned long long *gregs = context->uc_mcontext.gregs;
 	//void *addr = siginfo->si_addr;
+	//malloc_printf("addr: %p\n", addr);
   //fprintf(trace_fp, "Address from where crash happen is %llx %p %zx\n",context->uc_mcontext.gregs[REG_RIP], addr, (size_t)addr);
 	//fprintf(trace_fp, "rax:%p rbx:%p\n", (void*)context->uc_mcontext.gregs[REG_RAX], (void*)context->uc_mcontext.gregs[REG_RBX]);
-	context->uc_mcontext.gregs[REG_RIP] = context->uc_mcontext.gregs[REG_RIP] + 8;
-	assert (*(unsigned char*)(context->uc_mcontext.gregs[REG_RIP]) == 0x90);
+	//context->uc_mcontext.gregs[REG_RIP] = context->uc_mcontext.gregs[REG_RIP] + 8;
+	//assert (*(unsigned char*)(context->uc_mcontext.gregs[REG_RIP]) == 0x90);
 	signal_handler_invoked = true;
+	EmulateInstruction(gregs[REG_RIP], gregs);
 	san_abort(siginfo->si_addr);
 }
 
