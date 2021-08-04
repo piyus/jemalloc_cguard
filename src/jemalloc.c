@@ -2915,13 +2915,14 @@ struct Record {
 	unsigned char len;
 	int Offset;
 	int BaseOffset;
+	int size;
 };
 
 static int PF_NumRecords = 0;
 static int PF_MaxRecords = 0;
 static struct Record *PF_Recs = NULL;
 
-static void AddRecords(unsigned long long Addr, unsigned char BaseReg, unsigned char len, int Offset, int BaseOffset) {
+static void AddRecords(unsigned long long Addr, unsigned char BaseReg, unsigned char len, int Offset, int BaseOffset, int size) {
 	struct Record *Tmp;
 
 	if (PF_NumRecords == PF_MaxRecords) {
@@ -2934,6 +2935,7 @@ static void AddRecords(unsigned long long Addr, unsigned char BaseReg, unsigned 
 	PF_Recs[PF_NumRecords].len = len;
 	PF_Recs[PF_NumRecords].Offset = Offset;
 	PF_Recs[PF_NumRecords].BaseOffset = BaseOffset;
+	PF_Recs[PF_NumRecords].size = size;
 	PF_NumRecords++;
 }
 
@@ -2969,9 +2971,10 @@ struct FuncInfo { // Num Functions
 
 // NumRecords {
 
-struct LocMetadata {
+struct __attribute__((__packed__)) LocMetadata {
   unsigned long long PatchPointID;
   unsigned InstructionOffset;
+  unsigned LastOffset;
   unsigned short Reserved;
   unsigned short NumLocations;
 };
@@ -3005,16 +3008,15 @@ struct LocMetadata* PrintRecord(unsigned long long FunAddr, struct LocMetadata *
 {
 	assert(l->NumLocations == 2);
 	unsigned long long CurAddr = FunAddr + l->InstructionOffset;
+	unsigned len = l->LastOffset - l->InstructionOffset;
 	struct LocData *ld = (struct LocData*)(l + 1);
+
 	int BaseOffset = ld[0].Offset;
 	int BaseReg = ld[1].BaseRegister;
 	int Disp = ld[1].Offset;
-	int locsize0 = ld[0].LocationSize;
-	int locsize1 = ld[1].LocationSize;
+	int Size = ld[1].LocationSize;
 
-	malloc_printf("loc_size1:%d loc_size2:%d\n", locsize0, locsize1);
-
-	malloc_printf("#%llx [#%d #%d] :: #%d\n", CurAddr, BaseReg, Disp, BaseOffset);
+	AddRecords(CurAddr, BaseReg, len, Disp, BaseOffset, Size);
 	struct LiveMetadata *live = (struct LiveMetadata*)(((size_t)(ld+2) + 7) & ~(size_t)7ULL);
 	assert(live->NumLiveOuts == 0);
 	struct LocMetadata *Ret = (struct LocMetadata*)(((size_t)(live+1) + 7) & ~(size_t)7ULL);
@@ -3095,14 +3097,12 @@ initialize_sections()
 	for (i = 0; i < Header->e_shnum; i++)
 	{
 		char *Name = Strtab + Shdr[i].sh_name;
-		malloc_printf("Section:: %s\n", Name);
 		if (!strncmp(Name, ".llvm_stackmaps", 15)) {
 			char *start = Base + Shdr[i].sh_offset;
 			size_t size = Shdr[i].sh_size;
 			stackmap = malloc(size);
 			stackmap_size = size;
 			memcpy(stackmap, start, size);
-			malloc_printf("Found StackMap Section start:%p size:%zd\n", start, size);
 			print_stackmap(stackmap);
 		}
 		if (strncmp(Name, ".text", 6))
