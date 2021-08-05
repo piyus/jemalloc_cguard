@@ -226,6 +226,7 @@ static inline void* get_fast_base_safe(size_t object, bool *large_offset) {
 
 
 static inline void* get_fast_base(size_t object) {
+	//malloc_printf("get_fast_base :: %zd\n", object);
 	size_t offset = (object >> 49);
 	if (offset == MAX_OFFSET) {
 		return NULL;
@@ -2912,6 +2913,7 @@ static void addToGlobalCache(void *ptr) {
 struct Record {
 	unsigned long long Addr;
 	unsigned long long TargetAddr;
+	//unsigned char SBReg;
 	unsigned char BaseReg;
 	unsigned char len;
 	int Offset;
@@ -2930,18 +2932,24 @@ static int PF_NumRecords = 0;
 static int PF_MaxRecords = 0;
 static struct Record *PF_Recs = NULL;
 
-static void AddRecords(unsigned long long Addr, unsigned char BaseReg, unsigned char len, int Offset, int BaseOffset, int size) {
-	//malloc_printf("AddRecords:: Addr:%llx\n", Addr);
+static void CreateSpaceForRecords(int NumRecords) {
 	struct Record *Tmp;
+	PF_MaxRecords += NumRecords;
+	Tmp = malloc(sizeof(struct Record) * PF_MaxRecords);
+	memcpy(Tmp, PF_Recs, sizeof(struct Record) * PF_NumRecords);
+	PF_Recs = Tmp;
+}
+
+static void AddRecords(unsigned long long Addr, unsigned char SBReg, 
+	unsigned char BaseReg, unsigned char len, int Offset, int BaseOffset, int size) {
+	//malloc_printf("AddRecords:: Addr:%llx SBReg:%d BaseReg:%d\n", Addr, SBReg, BaseReg);
 
 	if (PF_NumRecords == PF_MaxRecords) {
-		PF_MaxRecords += 64;
-		Tmp = malloc(sizeof(struct Record) * PF_MaxRecords);
-		memcpy(Tmp, PF_Recs, sizeof(struct Record) * PF_NumRecords);
-		PF_Recs = Tmp;
+		CreateSpaceForRecords(64);
 	}
 	PF_Recs[PF_NumRecords].Addr = Addr;
 	PF_Recs[PF_NumRecords].TargetAddr = 0;
+	//PF_Recs[PF_NumRecords].SBReg = SBReg;
 	PF_Recs[PF_NumRecords].BaseReg = BaseReg;
 	PF_Recs[PF_NumRecords].len = len;
 	PF_Recs[PF_NumRecords].Offset = Offset;
@@ -3025,12 +3033,13 @@ struct LocMetadata* PrintRecord(unsigned long long FunAddr, struct LocMetadata *
 	unsigned len = l->LastOffset - l->InstructionOffset;
 	struct LocData *ld = (struct LocData*)(l + 1);
 
+	int SBReg = ld[0].BaseRegister;
 	int BaseOffset = ld[0].Offset;
 	int BaseReg = ld[1].BaseRegister;
 	int Disp = ld[1].Offset;
 	int Size = ld[1].LocationSize;
 
-	AddRecords(CurAddr, BaseReg, len, Disp, BaseOffset, Size);
+	AddRecords(CurAddr, SBReg, BaseReg, len, Disp, BaseOffset, Size);
 	struct LiveMetadata *live = (struct LiveMetadata*)(((size_t)(ld+2) + 7) & ~(size_t)7ULL);
 	assert(live->NumLiveOuts == 0);
 	struct LocMetadata *Ret = (struct LocMetadata*)(((size_t)(live+1) + 7) & ~(size_t)7ULL);
@@ -3042,9 +3051,11 @@ static void print_stackmap(char *Stackmap) {
 	struct Header *h = (struct Header*)Stackmap;
 	int NumFunctions = h->NumFunctions;
 	int NumConstants = h->NumConstants;
-	//int NumRecords = h->NumRecords;
+	int NumRecords = h->NumRecords;
 	struct FuncInfo *f = (struct FuncInfo*)(h+1);
 	int j, k;
+
+	CreateSpaceForRecords(NumRecords);
 
 	struct LocMetadata *l = (struct LocMetadata*)(((char*)&f[NumFunctions]) + NumConstants * sizeof(unsigned long long));
 
@@ -3145,17 +3156,21 @@ static int RegIDToGregsID(int reg) {
 		case 17: return REG_R14;
 		case 18: return REG_R15;
 	}
-	assert(0);
+	return -1;
 }
 
 static void CheckValidAccess(unsigned long long StartAddr, unsigned long long FaultAddr, int size)
 {
 	struct obj_header *head = (struct obj_header*)get_fast_base(StartAddr);
+	assert(head);
+	if (head == NULL) {
+		return;
+	}
 	unsigned long long Base = (unsigned long long)(head+1);
 	unsigned long long Limit = Base + head->size;
 	//malloc_printf("limit:%llx Base:%llx\n", Limit, Base);
 	if (FaultAddr < (unsigned long long)(head+1)  || (FaultAddr + size) > Limit) {
-		malloc_printf("access violation!\n");
+		//malloc_printf("access violation!\n");
 		abort3("access violation");
 	}
 	//malloc_printf("no access violation!\n");
@@ -3204,15 +3219,27 @@ static unsigned long long EmitStub(unsigned char *CurEIP, int len, int BaseReg)
 	return Ret;
 }
 
+static unsigned long long findBaseAddr(unsigned long long Addr, unsigned long long *gregs)
+{
+	int i;
+	for (i = 1; i <= 18; i++) {
+		int id = RegIDToGregsID(i);
+		if (id && (gregs[id] >> 49)) {
+			if (!((gregs[id] ^ Addr) << 16)) {
+				return gregs[id];
+			}
+		}
+	}
+	return Addr;
+}
+
 static void SoftwareEmulate(unsigned long long CurEIP, unsigned long long *gregs, struct Record *Rec)
 {
 	int Reg = RegIDToGregsID(Rec->BaseReg);
 	int len = Rec->len;
-	int Offset = Rec->Offset;
-	int BaseOffset = Rec->BaseOffset;
-	int Size = Rec->size;
 	unsigned long long RegAddr = gregs[Reg];
 	unsigned long long *RSP = (unsigned long long*)gregs[REG_RSP];
+
 	RSP -= 1;
 	RSP[0] = (CurEIP + len);
 	RSP -= 1;
@@ -3228,7 +3255,6 @@ static void SoftwareEmulate(unsigned long long CurEIP, unsigned long long *gregs
 
 static void EmulateInstruction(unsigned long long CurEIP, unsigned long long *gregs)
 {
-	//malloc_printf("CurEIP:%llx\n", CurEIP);
 	if (PF_NumRecords == 0) {
 		initialize_stackmap(stackmap);
 	}
@@ -3238,15 +3264,15 @@ static void EmulateInstruction(unsigned long long CurEIP, unsigned long long *gr
 		return;
 	}
 	int Reg = RegIDToGregsID(Rec->BaseReg);
-	int len = Rec->len;
+	assert(Reg != -1);
 	int Offset = Rec->Offset;
 	int BaseOffset = Rec->BaseOffset;
 	int Size = Rec->size;
 	unsigned long long FaultAddr = gregs[Reg] + Offset;
-	FaultAddr = ((FaultAddr << 16) >> 16);
 	unsigned long long StartAddr = FaultAddr - BaseOffset;
-	//malloc_printf("FaultAddr:%llx StartAddr:%llx Reg:%d\n", FaultAddr, StartAddr, Reg);
-	CheckValidAccess(StartAddr, FaultAddr, Size);
+	unsigned long long BaseStartAddr = findBaseAddr(StartAddr, gregs);
+	FaultAddr = ((FaultAddr << 16) >> 16);
+	CheckValidAccess(BaseStartAddr, FaultAddr, Size);
 	SoftwareEmulate(CurEIP, gregs, Rec);
 }
 
