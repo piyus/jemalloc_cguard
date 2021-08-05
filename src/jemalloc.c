@@ -2965,6 +2965,9 @@ static struct Record* SearchRecord(unsigned long long Addr)
 {
 	int i;
 	for (i = 0; i < PF_NumRecords; i++) {
+		if (i + 100 < PF_NumRecords && PF_Recs[i + 100].Addr < Addr) {
+			i += 100;
+		}
 		if (PF_Recs[i].Addr == Addr) {
 			return &PF_Recs[i];
 		}
@@ -3558,8 +3561,12 @@ void je_san_trace(char *_name, int line, int type, unsigned long long val, unsig
 
 
 #define MAX_STACK_PTRS 102400
-static __thread void *fasan_stack_ptrs[MAX_STACK_PTRS];
-static __thread int num_fasan_stack_ptrs = 0;
+
+__attribute__((visibility(
+    "default"))) __thread void *fasan_stack_ptrs[MAX_STACK_PTRS];
+
+__attribute__((visibility(
+    "default"))) __thread int num_fasan_stack_ptrs = 0;
 //static __thread void *callstack[MAX_STACK_PTRS];
 //static __thread int num_callstack = 0;
 
