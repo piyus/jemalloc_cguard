@@ -3558,28 +3558,28 @@ void je_san_trace(char *_name, int line, int type, unsigned long long val, unsig
 
 
 #define MAX_STACK_PTRS 102400
-static __thread void *stack_ptrs[MAX_STACK_PTRS];
-static __thread int num_stack_ptrs = 0;
+static __thread void *fasan_stack_ptrs[MAX_STACK_PTRS];
+static __thread int num_fasan_stack_ptrs = 0;
 //static __thread void *callstack[MAX_STACK_PTRS];
 //static __thread int num_callstack = 0;
 
 JEMALLOC_EXPORT
 void* je_san_enter_scope(int num_ptrs) {
-	//callstack[num_callstack++] = (void*)&stack_ptrs[num_stack_ptrs];
+	//callstack[num_callstack++] = (void*)&fasan_stack_ptrs[num_fasan_stack_ptrs];
 	//if (event_id > min_events) {
-		//malloc_printf("enter_scope %d %p\n", num_stack_ptrs, &stack_ptrs[num_stack_ptrs]);
+		//malloc_printf("enter_scope %d %p\n", num_fasan_stack_ptrs, &fasan_stack_ptrs[num_fasan_stack_ptrs]);
 	//}
-	void *ret = &stack_ptrs[num_stack_ptrs];
-	num_stack_ptrs += num_ptrs;
+	void *ret = &fasan_stack_ptrs[num_fasan_stack_ptrs];
+	num_fasan_stack_ptrs += num_ptrs;
 	return ret;
 }
 
 JEMALLOC_EXPORT
 void je_san_exit_scope(char *ptr) {
 	//num_callstack--;
-	num_stack_ptrs = (ptr - (char*)&stack_ptrs[0]) / sizeof(void*);
+	num_fasan_stack_ptrs = (ptr - (char*)&fasan_stack_ptrs[0]) / sizeof(void*);
 	//if (event_id > min_events) {
-		//malloc_printf("exit_scope :%d %p\n", num_stack_ptrs, ptr);
+		//malloc_printf("exit_scope :%d %p\n", num_fasan_stack_ptrs, ptr);
 	//}
 	//assert(callstack[num_callstack] == (void*)ptr);
 }
@@ -3593,15 +3593,15 @@ void je_san_restore_scope(char *ptr) {
 	}*/
 	void *top_ptr = (void*)&ptr;
 	int i;
-	for (i = num_stack_ptrs-1; i >= 0 && stack_ptrs[i] <= top_ptr; i--) {
-		num_stack_ptrs--;
+	for (i = num_fasan_stack_ptrs-1; i >= 0 && fasan_stack_ptrs[i] <= top_ptr; i--) {
+		num_fasan_stack_ptrs--;
 	}
 	if (event_id > min_events) {
 		if (trace_fp) {
-			fprintf(trace_fp, "restore_scope :%d %p\n", num_stack_ptrs, ptr);
+			fprintf(trace_fp, "restore_scope :%d %p\n", num_fasan_stack_ptrs, ptr);
 		}
 		else {
-			malloc_printf("restore_scope :%d %p\n", num_stack_ptrs, ptr);
+			malloc_printf("restore_scope :%d %p\n", num_fasan_stack_ptrs, ptr);
 		}
 	}
 }
@@ -3610,20 +3610,20 @@ void je_san_restore_scope(char *ptr) {
 JEMALLOC_EXPORT
 void je_san_record_stack_pointer(void *ptr) {
 	assert(0);
-	assert(num_stack_ptrs < MAX_STACK_PTRS);
+	assert(num_fasan_stack_ptrs < MAX_STACK_PTRS);
 	assert(ptr);
-	stack_ptrs[num_stack_ptrs] = ptr;
+	fasan_stack_ptrs[num_fasan_stack_ptrs] = ptr;
 	if (event_id > min_events) {
 		if (trace_fp) {
-			fprintf(trace_fp, "%lld recording:%p %d\n", event_id, ptr, num_stack_ptrs);
+			fprintf(trace_fp, "%lld recording:%p %d\n", event_id, ptr, num_fasan_stack_ptrs);
 		}
 		else {
-			malloc_printf("recording:%p %d\n", ptr, num_stack_ptrs);
+			malloc_printf("recording:%p %d\n", ptr, num_fasan_stack_ptrs);
 		}
 	}
 
 
-	num_stack_ptrs++;
+	num_fasan_stack_ptrs++;
 }
 
 static void print_stack(void *ptr) {
@@ -3631,10 +3631,10 @@ static void print_stack(void *ptr) {
 		return;
 	}
 	int i;
-	fprintf(trace_fp, "num_stack_ptrs:%d event_id:%lld begin:%p\n", num_stack_ptrs, event_id, je_stack_begin);
-	for (i = num_stack_ptrs-1; i >= 0; i--) {
-		assert(stack_ptrs[i]);
-		unsigned *sizeptr = ((unsigned*)stack_ptrs[i]) - 1;
+	fprintf(trace_fp, "num_fasan_stack_ptrs:%d event_id:%lld begin:%p\n", num_fasan_stack_ptrs, event_id, je_stack_begin);
+	for (i = num_fasan_stack_ptrs-1; i >= 0; i--) {
+		assert(fasan_stack_ptrs[i]);
+		unsigned *sizeptr = ((unsigned*)fasan_stack_ptrs[i]) - 1;
 		unsigned size = sizeptr[0];
 		fprintf(trace_fp, "size:%d magic:%x start:%p ptr:%p\n", size, *(sizeptr-1), sizeptr+1, ptr);
 	}
@@ -3642,12 +3642,12 @@ static void print_stack(void *ptr) {
 
 static void* get_stack_ptr_base(void *ptr) {
 	int i;
-	for (i = num_stack_ptrs-1; i >= 0; i--) {
-		assert(stack_ptrs[i]);
-		unsigned *sizeptr = ((unsigned*)stack_ptrs[i]) - 1;
+	for (i = num_fasan_stack_ptrs-1; i >= 0; i--) {
+		assert(fasan_stack_ptrs[i]);
+		unsigned *sizeptr = ((unsigned*)fasan_stack_ptrs[i]) - 1;
 		if ((unsigned*)ptr >= sizeptr) {
 			unsigned size = sizeptr[0];
-			if ((char*)ptr < ((char*)stack_ptrs[i]) + size) {
+			if ((char*)ptr < ((char*)fasan_stack_ptrs[i]) + size) {
 				unsigned *ret = sizeptr - 1;
 				if (!IS_MAGIC(ret[0])) {
 					malloc_printf("no magic\n");
@@ -6888,6 +6888,10 @@ je_free(void *_ptr) {
 	remove_from_san_hash(&head[1]);
 
 	if (head->size >= MAX_OFFSET) {
+		if (!(ptr == (void*)((char*)(&head[1]) + head->offset) || ptr == (void*)(&head[2]))) {
+			//malloc_printf("ptr:%p head:%p offset:%x\n", ptr, head, head->offset);
+			return;
+		}
 		assert(ptr == (void*)((char*)(&head[1]) + head->offset) || ptr == (void*)(&head[2]));
 		if (head->aligned) {
 			Segment *S = ADDR_TO_SEGMENT((size_t)head);
