@@ -3560,7 +3560,7 @@ void je_san_trace(char *_name, int line, int type, unsigned long long val, unsig
 }
 
 
-#define MAX_STACK_PTRS 102400
+#define MAX_STACK_PTRS 100000
 
 __attribute__((visibility(
     "default"))) __thread void *fasan_stack_ptrs[MAX_STACK_PTRS];
