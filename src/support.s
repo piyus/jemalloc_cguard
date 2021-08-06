@@ -23,6 +23,7 @@
 .comm GlobalCache, 32, 8
 .comm LastCrashAddr1, 8, 8
 .comm LastCrashAddr2, 8, 8
+.comm __lifevar, 8, 8
 
 #ARGS: rdi, rsi, rdx, rcx, r8, r9
 #CALLEE-SAVED: RBX, R12-R15, RBP
