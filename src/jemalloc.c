@@ -4785,6 +4785,25 @@ int je_san_munmap(void *_addr, size_t length)
 }
 
 JEMALLOC_EXPORT
+struct tm *je_gmtime(const time_t *timep) {
+	static struct tm* ret = NULL;
+	if (ret == NULL) {
+		ret = je_malloc(sizeof(struct tm));
+		assert(ret);
+	}
+
+	static struct tm* (*fptr)(const time_t*) = NULL;
+	if (fptr == NULL) {
+		fptr = get_func_addr("gmtime", je_gmtime);
+		assert(fptr);
+	}
+	struct tm* ret1 = fptr(timep);
+	memcpy(ret, ret1, sizeof(struct tm));
+	return ret;
+}
+
+
+JEMALLOC_EXPORT
 struct tm *je_localtime(const time_t *timep) {
 	static struct tm* ret = NULL;
 	if (ret == NULL) {
