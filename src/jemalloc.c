@@ -5035,7 +5035,11 @@ void *je_memmove(void *_dest, const void *_src, size_t n)
 static void restore_varg(unsigned long long **fixes, unsigned long long *vals, int num_fixes) {
 	int i;
 	for (i = 0; i < num_fixes; i++) {
-		*(fixes[i]) = vals[i];
+		unsigned long long new_val = *(fixes[i]);
+		unsigned long long old_val = vals[i];
+		if (!((new_val ^ old_val) << 16)) {
+			*(fixes[i]) = vals[i];
+		}
 	}
 }
 
