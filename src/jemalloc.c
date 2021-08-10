@@ -5176,6 +5176,72 @@ char *je_getenv(const char *name)
 	return Ret1;
 }
 
+#include <pwd.h>
+#include <grp.h>
+
+JEMALLOC_EXPORT
+struct passwd *je_getpwnam(const char *name)
+{
+	static struct passwd *Cache1[64] = {NULL};
+	static struct passwd *Cache2[64] = {NULL};
+	static struct passwd* (*fptr)(const char*) = NULL;
+	int i;
+
+	if (fptr == NULL) {
+		fptr = get_func_addr("getpwnam", je_getpwnam);
+	}
+	struct passwd *Ret = fptr(name);
+	if (Ret == NULL) {
+		return NULL;
+	}
+
+	for (i = 0; i < 63 && Cache1[i]; i++) {
+		if (Cache1[i] == Ret) {
+			memcpy(Cache2[i], Ret, sizeof(struct passwd));
+			return Cache2[i];
+		}
+	}
+
+	struct passwd *Ret1 = (struct passwd*)je_malloc(sizeof(struct passwd));
+	memcpy(Ret1, Ret, sizeof(struct passwd));
+
+	Cache1[i] = Ret;
+	Cache2[i] = Ret1;
+	return Ret1;
+}
+
+
+JEMALLOC_EXPORT
+struct group *je_getgrnam(const char *name)
+{
+	static struct group *Cache1[64] = {NULL};
+	static struct group *Cache2[64] = {NULL};
+	static struct group* (*fptr)(const char*) = NULL;
+	int i;
+
+	if (fptr == NULL) {
+		fptr = get_func_addr("getgrnam", je_getgrnam);
+	}
+	struct group *Ret = fptr(name);
+	if (Ret == NULL) {
+		return NULL;
+	}
+
+	for (i = 0; i < 63 && Cache1[i]; i++) {
+		if (Cache1[i] == Ret) {
+			memcpy(Cache2[i], Ret, sizeof(struct group));
+			return Cache2[i];
+		}
+	}
+
+	struct group *Ret1 = (struct group*)je_malloc(sizeof(struct group));
+	memcpy(Ret1, Ret, sizeof(struct group));
+
+	Cache1[i] = Ret;
+	Cache2[i] = Ret1;
+	return Ret1;
+}
+
 
 JEMALLOC_EXPORT
 int je_vasprintf(char **strp, const char *fmt, va_list ap)
