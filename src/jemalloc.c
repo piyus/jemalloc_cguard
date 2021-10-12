@@ -3557,6 +3557,7 @@ void je_san_trace(char *_name, int line, int type, unsigned long long val, unsig
 	if (id >= 7099) {
 		//debug_break(NULL);
 	}
+	//fsync(fileno(trace_fp));
 }
 
 
@@ -4696,8 +4697,8 @@ char *je_strerror_r(int errnum, char *buf, size_t buflen)
 JEMALLOC_EXPORT
 char *je_strerror(int errnum)
 {
-	static char *ret[128] = {NULL};
-	assert(errnum < 128);
+	static char *ret[256] = {NULL};
+	assert(errnum < 256);
 	if (ret[errnum] != NULL) {
 		return ret[errnum];
 	}
@@ -4714,6 +4715,21 @@ char *je_strerror(int errnum)
 	memcpy(ret2, ret1, len);
 	ret2[len] = '\0';
 	return ret2;
+}
+
+JEMALLOC_EXPORT
+ssize_t je_san_recv(int sockfd, void *buf, size_t len, int flags)
+{
+	static ssize_t (*fptr)(int, void*, size_t, int) = NULL;
+	if (fptr == NULL) {
+		fptr = get_func_addr("recv", je_san_recv);
+		assert(fptr);
+	}
+	struct obj_header *h = _je_san_get_base(buf);
+	assert(len <= h->size);
+	buf = UNMASK(buf);
+	ssize_t ret = fptr(sockfd, buf, len, flags);
+	return ret;
 }
 
 JEMALLOC_EXPORT
@@ -4766,6 +4782,19 @@ void *je_san_mmap(void *_addr, size_t length, int prot, int flags,
 {
 	void *addr = UNMASK(_addr);
 	void *ret = mmap(addr, length+PAGE_SIZE, prot, flags, fd, offset);
+	if (ret != MAP_FAILED) {
+		ret = make_obj_header(ret+PAGE_SIZE-OBJ_HEADER_SIZE, length, 0, 0);
+	}
+	//malloc_printf("mmap:: %p fd:%d\n", ret, fd);
+	return ret;
+}
+
+JEMALLOC_EXPORT
+void *je_san_mmap64(void *_addr, size_t length, int prot, int flags,
+                    int fd, off_t offset)
+{
+	void *addr = UNMASK(_addr);
+	void *ret = mmap64(addr, length+PAGE_SIZE, prot, flags, fd, offset);
 	if (ret != MAP_FAILED) {
 		ret = make_obj_header(ret+PAGE_SIZE-OBJ_HEADER_SIZE, length, 0, 0);
 	}
