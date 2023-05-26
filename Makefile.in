@@ -89,7 +89,7 @@ TEST_LIBRARY_PATH :=
 endif
 endif
 
-LIBJEMALLOC := $(LIBPREFIX)jemalloc$(install_suffix)
+LIBJEMALLOC := $(LIBPREFIX)jemalloc_cg$(install_suffix)
 
 # Lists of files.
 BINS := $(objroot)bin/jemalloc-config $(objroot)bin/jemalloc.sh $(objroot)bin/jeprof
