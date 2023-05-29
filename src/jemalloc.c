@@ -2792,7 +2792,7 @@ void debug_break(void* v)
 
 #include <elf.h>
 #include <sys/stat.h>
-#define PATH_SZ 128
+#define PATH_SZ 256
 
 #if 0
 static size_t
